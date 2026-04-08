@@ -1,4 +1,6 @@
 
+#include <unordered_map>
+
 // Print macros that only fire up in Debug mode
 #ifndef NDEBUG
     #define DEBUG_PRINT(x) std::cout << x << std::endl;
@@ -29,3 +31,37 @@ template<class T> std::ostream &operator<<(std::ostream &os, std::vector<T> v) {
     std::cout << "Assertion failed: " << #x << std::endl; \
     exit(1);                                               \
   }
+
+// A Union Find data structure templated on element type T.
+// T can be any type that is hashable (has std::hash<T>) and equality-comparable,
+// including geometry-central mesh elements like Vertex, Edge, etc.
+// Elements must be inserted explicitly via insert() before use.
+template<typename T>
+class UnionFind {
+    std::unordered_map<T, T> id;
+    std::unordered_map<T, int> sz;
+    int cnt = 0;
+public:
+    // Register x as a new singleton set.
+    void insert(T x) {
+        if (id.count(x)) return;
+        id[x] = x; sz[x] = 1; cnt++;
+    }
+    // Return the representative of the set containing p (with path compression).
+    T find(T p) {
+        while (p != id[p]) { id[p] = id[id[p]]; p = id[p]; }
+        return p;
+    }
+    // Replace sets containing x and y with their union.
+    void merge(T x, T y) {
+        T i = find(x), j = find(y); if (i == j) return;
+        // make smaller root point to larger one
+        if (sz[i] < sz[j]) { id[i] = j; sz[j] += sz[i]; }
+        else                { id[j] = i; sz[i] += sz[j]; }
+        cnt--;
+    }
+    // Are x and y in the same set?
+    bool connected(T x, T y) { return find(x) == find(y); }
+    // Return the number of disjoint sets.
+    int count() { return cnt; }
+};

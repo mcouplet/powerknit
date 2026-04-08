@@ -111,7 +111,7 @@ else()
 endif()
 
 # ── Executable ────────────────────────────────────────────────────────────────
-add_executable(power_knitting src/main.cpp)
+add_executable(power_knitting src/main.cpp src/knit_model.cpp src/time_function.cpp)
 
 target_link_libraries(power_knitting PRIVATE
     polyscope

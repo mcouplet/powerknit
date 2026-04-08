@@ -1,26 +1,14 @@
 #include <iostream>
 #include <filesystem>
 #include <CLI/CLI.hpp>
-#include <nlohmann/json.hpp>
 
 #include "utils.h"
-
-#include "geometrycentral/surface/meshio.h"
-#include "geometrycentral/surface/geometry.h"
+#include "knit_model.h"
+#include "time_function.h"
 
 using namespace std;
-using namespace geometrycentral;
-using namespace geometrycentral::surface;
 
 namespace fs = std::filesystem;
-
-// This structure will contain the "knit instructions": model, boundary conditions, boosting, masking, ...
-struct KnitModel {
-
-  unique_ptr<ManifoldSurfaceMesh> mesh;
-  unique_ptr<EdgeLengthGeometry> geom;
-
-};
 
 int main(int argc, char** argv) {
 
@@ -40,34 +28,8 @@ int main(int argc, char** argv) {
   // TODO: add options for number of singularities and stuff
   CLI11_PARSE(app, argc, argv);
 
-  KnitModel model;
-
-  if (inPath.extension() == ".json") {
-
-    nlohmann::json jsonData = nlohmann::json::parse(ifstream(inPath));
-
-    // Resolve model and vertex mappings paths
-    fs::path modelPath = jsonData["model_path"].get<std::string>();
-    if (!fs::exists(modelPath)) modelPath = inPath.parent_path() / modelPath; // also try path relative to JSON file
-    ensure(fs::exists(modelPath));
-    fs::path vertexMappingsPath = jsonData["vertex_mappings"].get<std::string>();
-    if (!fs::exists(vertexMappingsPath)) vertexMappingsPath = inPath.parent_path() / vertexMappingsPath; // also try path relative to JSON file
-    ensure(fs::exists(vertexMappingsPath));
-
-    // Read mesh and geometry
-    unique_ptr<ManifoldSurfaceMesh> globalMesh;
-    unique_ptr<VertexPositionGeometry> globalGeom;
-    tie(globalMesh, globalGeom) = readManifoldSurfaceMesh(modelPath);
-
-    // Read vertex mappings
-    vector<pair<int,int>> vertexMappings = readVertexMappings(vertexMappingsPath);
-
-    // Do we need the whole "pre" thing?
-
-
-  } else {
-    cout << "Input file extensions other thatn json are not yet supported." << endl;
-  }
+  KnitModel knitModel(inPath);
+  TimeFunction timeFunction(knitModel);
 
   return 0;
 }
