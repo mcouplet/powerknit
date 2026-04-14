@@ -38,8 +38,8 @@ int main(int argc, char** argv) {
   // Compute time function, curl measures, and decompose into cylinders
   TimeFunction timeFunction(knitModel);
 
-  // // This part should be done per cylinder once we have that figured out
-  // Quantizer quantizer(knitModel);
+  // This part should be done per cylinder once we have that figured out
+  Quantizer quantizer(knitModel);
   // vector<SurfacePoint> posCourseSings = quantizer.quantizeMeasure(timeFunction.posCourseCurl);
   // vector<SurfacePoint> negCourseSings = quantizer.quantizeMeasure(timeFunction.negCourseCurl);
   // SingularityMatcher singularityMatcher(knitModel, timeFunction, posCourseSings, negCourseSings);

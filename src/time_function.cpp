@@ -8,8 +8,8 @@ using namespace std;
 TimeFunction::TimeFunction(const KnitModel& _knitModel) : 
   knitModel(_knitModel), 
   mesh(*knitModel.pMesh), geom(*knitModel.pGeom),
-  timeFunction(mesh), timeFunctionGrad(mesh), courseGuide(mesh), waleGuide(mesh),
-  courseCurl(mesh), waleCurl(mesh) {  
+  timeFunction(mesh), timeFunctionGrad(mesh), courseGuide(mesh), waleGuide(mesh), courseCurl(mesh), waleCurl(mesh),
+  posCourseCurl(mesh), negCourseCurl(mesh), posWaleCurl(mesh), negWaleCurl(mesh) {  
 
   computeTimeFunction();
   knitModel.addVertexScalarQuantity("time function", timeFunction, polyscope::DataType::MAGNITUDE);
@@ -30,6 +30,10 @@ TimeFunction::TimeFunction(const KnitModel& _knitModel) :
   computeCurl(waleGuide, waleCurl);
   knitModel.addVertexScalarQuantity("course curl", courseCurl, polyscope::DataType::SYMMETRIC);
   knitModel.addVertexScalarQuantity("wale curl", waleCurl, polyscope::DataType::SYMMETRIC);
+
+  // Split them into positive and negative
+  splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
+  splitMeasure(courseCurl, posWaleCurl,   negWaleCurl);
 }
 
 void TimeFunction::computeTimeFunction() {
@@ -154,6 +158,13 @@ void TimeFunction::computeTimeFunctionGrad() {
   }
 }
 
+void TimeFunction::splitMeasure(const VertexData<double> measure, VertexData<double>& posMeasure, VertexData<double>& negMeasure) {
+  for (Vertex v : mesh.vertices())
+    if (measure[v] > 0)
+      posMeasure[v] = +measure[v];
+    else
+      negMeasure[v] = -measure[v];
+}
 
 
 void TimeFunction::computeCurl(const FaceData<Vector2>& field, VertexData<double>& curl) {

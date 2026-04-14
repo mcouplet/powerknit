@@ -16,10 +16,14 @@ private:
   ManifoldSurfaceMesh& mesh;
   EdgeLengthGeometry& geom; 
 
-  
+  // // Set of heat method solvers (one per thread)
+  // std::vector<VectorHeatMethodSolver> vSolvers;
+
 public:
 
-  Quantizer(const KnitModel& _knitModel);
+  Quantizer(const KnitModel& _knitModel) : 
+    knitModel(_knitModel), 
+    mesh(*knitModel.pMesh), geom(*knitModel.pGeom) {}
 
   // Since we'll quantize different measures on the same mesh,
   // we design quantization as a function.
