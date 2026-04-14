@@ -1,0 +1,3 @@
+[submodule "deps/geometry-central"]
+	path = deps/geometry-central
+	url = https://github.com/mcouplet/geometry-central.git

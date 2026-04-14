@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(power-knitting LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -65,13 +65,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(CLI11)
 
-# geometry-central (custom fork)
-FetchContent_Declare(
-    geometry-central
-    GIT_REPOSITORY https://github.com/mcouplet/geometry-central.git
-    GIT_TAG        master
-)
-FetchContent_MakeAvailable(geometry-central)
+# geometry-central (custom fork — submodule at deps/geometry-central)
+add_subdirectory(deps/geometry-central)
 
 # nlohmann/json — declared before polyscope so polyscope reuses this target
 FetchContent_Declare(
@@ -89,6 +84,16 @@ FetchContent_Declare(
     GIT_TAG        v2.6.1
 )
 FetchContent_MakeAvailable(polyscope)
+
+# libigl (header-only core)
+FetchContent_Declare(
+    libigl
+    GIT_REPOSITORY https://github.com/libigl/libigl.git
+    GIT_TAG        v2.5.0
+    GIT_SHALLOW    TRUE
+)
+set(LIBIGL_USE_STATIC_LIBRARY OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(libigl)
 
 # ── OpenMP (Apple Silicon / Homebrew libomp) ──────────────────────────────────
 if(APPLE)
@@ -119,5 +124,6 @@ target_link_libraries(power_knitting PRIVATE
     Eigen3::Eigen
     CLI11::CLI11
     nlohmann_json::nlohmann_json
+    igl::core
     ${OpenMP_CXX_LIBRARIES}
 )
