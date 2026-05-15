@@ -95,6 +95,15 @@ FetchContent_Declare(
 set(LIBIGL_USE_STATIC_LIBRARY OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(libigl)
 
+# LBFGSpp (header-only)
+FetchContent_Declare(
+    lbfgspp
+    GIT_REPOSITORY https://github.com/yixuan/LBFGSpp.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(lbfgspp)
+
 # ── OpenMP (Apple Silicon / Homebrew libomp) ──────────────────────────────────
 if(APPLE)
     set(OpenMP_C_FLAGS        "-Xpreprocessor -fopenmp")
@@ -116,14 +125,23 @@ else()
 endif()
 
 # ── Executable ────────────────────────────────────────────────────────────────
-add_executable(power_knitting src/main.cpp src/knit_model.cpp src/time_function.cpp)
+add_executable(powerknit 
+    src/main.cpp
+    src/knit_model.cpp
+    src/time_function.cpp
+    src/morse_decomposition.cpp
+    src/quantizer.cpp
+    src/singularity_matcher.cpp
+    src/foliation.cpp
+)
 
-target_link_libraries(power_knitting PRIVATE
+target_link_libraries(powerknit PRIVATE
     polyscope
     geometry-central
     Eigen3::Eigen
     CLI11::CLI11
     nlohmann_json::nlohmann_json
     igl::core
+    lbfgspp
     ${OpenMP_CXX_LIBRARIES}
 )

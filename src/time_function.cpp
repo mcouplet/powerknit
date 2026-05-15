@@ -1,24 +1,33 @@
 #include "time_function.h"
 #include "utils.h"
 
+#include "geometrycentral/surface/signpost_intrinsic_triangulation.h"
+#include "geometrycentral/surface/embed_convex.h"
+
 #include <igl/grad_intrinsic.h>
 
 using namespace std;
 
-TimeFunction::TimeFunction(const KnitModel& _knitModel) : 
-  knitModel(_knitModel), 
-  mesh(*knitModel.pMesh), geom(*knitModel.pGeom),
-  timeFunction(mesh), timeFunctionGrad(mesh), courseGuide(mesh), waleGuide(mesh), courseCurl(mesh), waleCurl(mesh),
-  posCourseCurl(mesh), negCourseCurl(mesh), posWaleCurl(mesh), negWaleCurl(mesh) {  
+TimeFunction::TimeFunction(KnitModel& _knitModel) : knitModel(_knitModel) {  
 
-  computeTimeFunction();
+  computeTimeFunction(_knitModel);
   knitModel.addVertexScalarQuantity("time function", timeFunction, polyscope::DataType::MAGNITUDE);
+
+  // Find saddle vertices of time function
+  findSaddles();
+  // knitModel.showVertices("time function saddles", saddles);
+  // cout << "Number of saddle vertices: " << saddles.size() << endl;
+
+  cutSaddleLoops(_knitModel);
+  findSaddles(); // hopefully they stay the same
 
   computeTimeFunctionGrad();
   knitModel.addFaceTangentVectorQuantity("time function grad", timeFunctionGrad);
 
   // Compute course and wale guiding fields from time function gradient
-  for (Face f : mesh.faces()) {
+  courseGuide = FaceData<Vector2>(knitModel.mesh());
+  waleGuide   = FaceData<Vector2>(knitModel.mesh());
+  for (Face f : knitModel.mesh().faces()) {
     courseGuide[f] = timeFunctionGrad[f].normalize();
     waleGuide[f] = courseGuide[f].rotate90();
   }
@@ -31,24 +40,46 @@ TimeFunction::TimeFunction(const KnitModel& _knitModel) :
   knitModel.addVertexScalarQuantity("course curl", courseCurl, polyscope::DataType::SYMMETRIC);
   knitModel.addVertexScalarQuantity("wale curl", waleCurl, polyscope::DataType::SYMMETRIC);
 
-  // Split them into positive and negative
-  splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
-  splitMeasure(courseCurl, posWaleCurl,   negWaleCurl);
+  // // Split them into positive and negative
+  // splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
+  // splitMeasure(courseCurl, posWaleCurl,   negWaleCurl);
+
+  // cutMesh();
 }
 
-void TimeFunction::computeTimeFunction() {
+TimeFunction::TimeFunction(KnitSubModel& _knitModel, const TimeFunction& parent) : knitModel(_knitModel) {
+  // assert(_knitModel.parent == parent);
+
+  // References, for convenience
+  ManifoldSurfaceMesh& mesh = knitModel.mesh();
+  EdgeLengthGeometry& geom = knitModel.geom();
+
+  timeFunction = VertexData<double>(mesh); _knitModel.transferFromParent(parent.timeFunction, timeFunction);
+  courseCurl   = VertexData<double>(mesh); _knitModel.transferFromParent(parent.courseCurl, courseCurl);
+  waleCurl     = VertexData<double>(mesh); _knitModel.transferFromParent(parent.waleCurl, waleCurl);
+
+  splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
+  splitMeasure(waleCurl, posWaleCurl, negWaleCurl);
+  // Do we need to transfer other stuff?
+}
+
+void TimeFunction::computeTimeFunction(KnitModel& fullKnitModel) {
 
   // TODO:
   // This is a very generic problem (linear solve with constraints):
   // is there a way to make this function more abstract and re-use it?
   // Maybe we should use the solver directly provided by geometry-central?
 
+  // References, for convenience
+  ManifoldSurfaceMesh& mesh = knitModel.mesh();
+  EdgeLengthGeometry& geom = knitModel.geom();
+
   // Gather start and end vertices
   vector<Vertex> startVertices, endVertices;
-  for (BoundaryLoop bLoop : knitModel.courseStartLoops)
+  for (BoundaryLoop bLoop : fullKnitModel.courseStartLoops)
     for (Vertex v : bLoop.adjacentVertices())
       startVertices.push_back(v);
-  for (BoundaryLoop bLoop : knitModel.courseEndLoops)
+  for (BoundaryLoop bLoop : fullKnitModel.courseEndLoops)
     for (Vertex v : bLoop.adjacentVertices())
       endVertices.push_back(v);
 
@@ -58,7 +89,7 @@ void TimeFunction::computeTimeFunction() {
   int n = mesh.nVertices();
   int m0 = startVertices.size();
   int m1 = endVertices.size();
-  int me = knitModel.courseAlignedEdges.size();
+  int me = fullKnitModel.courseAlignedEdges.size();
 
   // Setup constraints matrix Ax = b
   Eigen::MatrixXd A(m0+m1+me, n); A.setZero();
@@ -75,7 +106,7 @@ void TimeFunction::computeTimeFunction() {
   }
   // Other course-aligned edges
   for (int i = 0; i < me; i++) {
-      Edge e = knitModel.courseAlignedEdges[i];
+      Edge e = fullKnitModel.courseAlignedEdges[i];
       int j1 = e.firstVertex().getIndex(), j2 = e.secondVertex().getIndex(); // vertices for which we impose t(v1) = t(v2)
       A(m0+m1+i, j1) = +1;
       A(m0+m1+i, j2) = -1;
@@ -122,12 +153,17 @@ void TimeFunction::computeTimeFunction() {
       std::cerr << "Solving failed" << std::endl;
   }
 
+  timeFunction = VertexData<double>(mesh);
   for (Vertex v : mesh.vertices()){
       timeFunction[v] = u(v.getIndex());
   }
 }
 
 void TimeFunction::computeTimeFunctionGrad() {
+
+  // References, for convenience
+  ManifoldSurfaceMesh& mesh = knitModel.mesh();
+  EdgeLengthGeometry& geom = knitModel.geom();
 
   // Setup matrices that IGL needs
   // Be careful with index convention! Edge i is opposite vertex i
@@ -142,6 +178,7 @@ void TimeFunction::computeTimeFunctionGrad() {
       }
   }
 
+
   // Compute intrinsic gradient operator
   SparseMatrix<double> G; // (2*F, V)
   igl::grad_intrinsic(L, F, G);
@@ -153,13 +190,17 @@ void TimeFunction::computeTimeFunctionGrad() {
 
   // Compute gradient and convert to GC format
   Eigen::VectorXd Gu = G*u;
+  timeFunctionGrad = FaceData<Vector2>(mesh);
   for (Face face : mesh.faces()) {
       timeFunctionGrad[face] = {Gu(face.getIndex()), Gu(face.getIndex()+mesh.nFaces())};
   }
 }
 
 void TimeFunction::splitMeasure(const VertexData<double> measure, VertexData<double>& posMeasure, VertexData<double>& negMeasure) {
-  for (Vertex v : mesh.vertices())
+
+  posMeasure = VertexData<double>(knitModel.mesh());
+  negMeasure = VertexData<double>(knitModel.mesh());
+  for (Vertex v : knitModel.mesh().vertices())
     if (measure[v] > 0)
       posMeasure[v] = +measure[v];
     else
@@ -169,11 +210,77 @@ void TimeFunction::splitMeasure(const VertexData<double> measure, VertexData<dou
 
 void TimeFunction::computeCurl(const FaceData<Vector2>& field, VertexData<double>& curl) {
 
+  // References, for convenience
+  ManifoldSurfaceMesh& mesh = knitModel.mesh();
+  EdgeLengthGeometry& geom = knitModel.geom();
+
+
   geom.requireHalfedgeVectorsInFace(); // this will provide us the half-edges in the local basis of the faces
   geom.requireVertexDualAreas(); // the A_v's
+  curl = VertexData<double>(mesh, 0.0);
   for (Halfedge he : mesh.interiorHalfedges()) {
     Vertex v = he.next().tipVertex();
     if (!v.isBoundary())
       curl[v] += (1./geom.vertexDualAreas[v]) * dot(field[he.face()], geom.halfedgeVectorsInFace[he]);
   }
+}
+
+void TimeFunction::findSaddles() {
+
+  // References, for convenience
+  ManifoldSurfaceMesh& mesh = knitModel.mesh();
+  EdgeLengthGeometry& geom = knitModel.geom();
+
+  // Also work if time function is constant along an edge,
+  // which is the case on separatrices :-)
+
+  HalfedgeData<int> halfedgeSigns(mesh, 0);
+  for (Halfedge he : mesh.halfedges()) {
+    double t1 = timeFunction[he.tailVertex()], t2 = timeFunction[he.tipVertex()];
+    if (t2 > t1) halfedgeSigns[he] = +1;
+    else if (t2 < t1) halfedgeSigns[he] = -1;
+  }
+  
+  isSaddle = VertexData<bool>(mesh, false);
+
+  int saddleCount = 0;
+  for (Vertex v : mesh.vertices()) {
+    vector<int> signs; // around this vertex
+    for (Halfedge he : v.outgoingHalfedges()) 
+      if (halfedgeSigns[he] != 0)
+        signs.push_back(halfedgeSigns[he]);
+    int nSignChanges = 0;
+    for (int i = 0; i < signs.size(); i++)
+      nSignChanges += (signs[i] != signs[(i+1)%signs.size()]);
+    if (nSignChanges > 2) {
+      this->isSaddle[v] = true;
+      saddleCount++;
+    }
+  }
+  DEBUG_VAR(saddleCount);
+}
+
+void TimeFunction::cutSaddleLoops(KnitModel& fullKnitModel) {
+
+  // Save the time values beforehand because the saddle vertices will become invalid
+  vector<double> saddleValues;
+  for (Vertex v : knitModel.mesh().vertices())
+    if (isSaddle[v])
+      saddleValues.push_back(timeFunction[v]);
+  
+  DEBUG_VAR(saddleValues);
+
+  vector<Edge> sepEdges; // list of all separatrix edges in glued setting, will be populated each time
+  for (double value : saddleValues)
+    fullKnitModel.cutAlongIsoline(timeFunction, value, sepEdges);
+
+  fullKnitModel.registerPSMesh("cut mesh");
+  knitModel.addVertexScalarQuantity("time function", timeFunction, polyscope::DataType::MAGNITUDE); // put time function on new PS mesh
+
+  isSeparatrix = EdgeData<bool>(knitModel.mesh(), false);
+  for (Edge e : sepEdges)
+    isSeparatrix[e] = true;
+  
+  fullKnitModel.showSeparatrices()->setRadius(1e-3);
+
 }

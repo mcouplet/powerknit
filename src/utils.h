@@ -1,6 +1,8 @@
 
 #include <unordered_map>
 
+#undef NDEBUG // for now so that we can run in RelWithDebInfo
+
 // Print macros that only fire up in Debug mode
 #ifndef NDEBUG
     #define DEBUG_PRINT(x) std::cout << x << std::endl;
@@ -31,6 +33,16 @@ template<class T> std::ostream &operator<<(std::ostream &os, std::vector<T> v) {
     std::cout << "Assertion failed: " << #x << std::endl; \
     exit(1);                                               \
   }
+
+template<typename T>
+std::pair<std::vector<T>, std::vector<T>> unzip(const std::vector<std::pair<T,T>> pairs) {
+  std::pair<std::vector<T>, std::vector<T>> vecs;
+  for (const auto& [a,b] : pairs) {
+    vecs.first.push_back(a);
+    vecs.second.push_back(b);
+  }
+  return vecs;
+}
 
 // A Union Find data structure templated on element type T.
 // T can be any type that is hashable (has std::hash<T>) and equality-comparable,
