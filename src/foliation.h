@@ -46,6 +46,7 @@ private:
     std::vector<double> lbs, ubs; // lower and upper bounds
     Vector<double> lbOsqp, ubOsqp; // we need these to outlive setupSolver
     int m = 0; // current number of constraints
+    static constexpr auto inf = OsqpEigen::INFTY;
 
   public:
     Constraints (const KnitModel& knitModel) : knitModel(knitModel) {}
@@ -89,10 +90,23 @@ private:
       }
     }
 
-    // // he1 is +1, he2 is -1. Both are pointing in increasing time function.
-    // void constrainSymmetricShortRowEnds(Halfedge he1, Halfedge he2) {
+    // he1 is +1, he2 is -1. Both are pointing in increasing time function.
+    void constrainSymmetricShortRowEnds(Halfedge he1, Halfedge he2) {
 
-    // }
+      // σ[he1] >= 0
+      triplets.emplace_back(m, he1.getIndex(), 1);
+      lbs.push_back(0); ubs.push_back(inf);
+      m++;
+      // σ[he2.twin()] <= 0
+      triplets.emplace_back(m, he2.twin().getIndex(), 1);
+      lbs.push_back(-inf); ubs.push_back(0);
+      m++;
+      // σ[he1] == -σ[he2.twin()]
+      triplets.emplace_back(m, he1.getIndex(), 1);
+      triplets.emplace_back(m, he2.twin().getIndex(), 1);
+      lbs.push_back(0); ubs.push_back(0);
+      m++;
+    }
 
     void setupSolver(OsqpEigen::Solver& solver) {
       // ensure(lbs.size() == m); ensure(ubs.size() == m);

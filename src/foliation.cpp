@@ -11,7 +11,63 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   ManifoldSurfaceMesh& mesh = knitModel.mesh();
   EdgeLengthGeometry& geom = knitModel.geom();
   geom.requireFaceAreas();
+  int nCells = pairedSingsPerCell.size();
 
+  // Put singularities on edges and make sure there's only 1 per edge
+  EdgeData<int> singIndex(mesh, 0); // on parent mesh. 0, +1 or -1
+  vector<vector<tuple<Halfedge, Halfedge, double>>> singHalfedgesPerCell(nCells); // half-edge points UP in terms of time function. Pruned and ordered. We also attach the time value
+  vector<EdgeData<int>> singOrderPerCell; // 0, +i or -i where i is the order from 1 to n
+  for (auto& cell : morseDecomp.cells) {
+
+    auto& pairedSings = pairedSingsPerCell[cell.getIndex()]; // shorthand
+    vector<pair<SurfacePoint,SurfacePoint>> droppedPairs, prunedPairs; // just for viz
+
+    // Specify singular edges.
+    // Make sure there's at most one singularity per edge.
+    auto& singOrder = singOrderPerCell.emplace_back(cell.model().mesh(), 0); 
+
+    auto& singHalfedges = singHalfedgesPerCell[cell.getIndex()];
+    int nDroppedPairs = 0;
+    for (int iPair = 0; iPair < pairedSings.size(); iPair++) {
+      auto &[s1,s2] = pairedSings[iPair];
+      double t1 = cell.timeFunction(s1), t2 = cell.timeFunction(s2);
+      ensure(abs(t1-t2) < 1e-9); // sanity check
+      Edge e1 = s1.edge, e2 = s2.edge;
+      if (singOrder[e1] != 0 || singOrder[e2] != 0) {
+        nDroppedPairs++;
+        // droppedPairs.push_back({cell.model().transferToParent(s1), cell.model().transferToParent(s2)});
+        droppedPairs.push_back({s1, s2});
+        continue;
+      } 
+      singOrder[e1] = +(iPair+1), singOrder[e2] = -(iPair+1);
+      Halfedge he1 = e1.halfedge(), he2 = e2.halfedge();
+      if (cell.timeFunction(he1.tipVertex()) < cell.timeFunction(he1.tailVertex())) he1 = he1.twin();
+      if (cell.timeFunction(he2.tipVertex()) < cell.timeFunction(he2.tailVertex())) he2 = he2.twin();
+      singHalfedges.push_back({he1, he2, t1});
+      prunedPairs.push_back({s1, s2});
+    }
+    DEBUG_PRINT("Dropped {} singularity pairs on cell #{}.", nDroppedPairs, cell.getIndex());
+
+    auto [droppedPos, droppedNeg] = unzip(droppedPairs);
+    cell.model().showSurfacePoints("dropped pos", droppedPos)->setEnabled(false);
+    cell.model().showSurfacePoints("dropped neg", droppedNeg)->setEnabled(false);
+    
+    auto [prunedPosSings, prunedNegSings] = unzip(prunedPairs);
+    cell.model().showSurfacePoints("pruned pos course sings", prunedPosSings)->setPointColor({1,0,0});
+    cell.model().showSurfacePoints("pruned neg course sings", prunedNegSings)->setPointColor({0,0,1});
+
+    // cell.model().addEdgeScalarQuantity("sing index", singIndex, polyscope::DataType::SYMMETRIC);
+
+    // Populate singIndex on parent
+    for (Edge e : cell.model().mesh().edges()) {
+      int order = singOrder[e];
+      Edge pe = cell.model().transferToParent(e); // parent edge
+      if (order > 0) singIndex[pe] = +1;
+      if (order < 0) singIndex[pe] = -1;
+    }
+  }
+
+  // OBJECTIVE FUNCTION
   // Set up the objective function (1/2 x'Px + q'x + c) using TinyAD.
   auto obj = TinyAD::scalar_function<1>(mesh.halfedges());
   obj.add_elements<3>(mesh.faces(), [&](auto& element) {
@@ -38,85 +94,8 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   solver.data()->setHessianMatrix(hess);
   solver.data()->setGradient(grad);
 
-  // Setup constraints
-  // vector<Eigen::Triplet<double>> conTriplets; // constraint triplets
-  // vector<double> lbs, ubs; // lower and upper bounds
-  // int nCon = 0; // current constraint
-
+  // CONSTRAINTS
   Constraints constraints(knitModel);
-
-  // Put singularities on edges and make sure there's only 1 per edge
-  EdgeData<int> singIndex(mesh, 0); // 0, +1 or -1
-  for (auto& cell : morseDecomp.cells) {
-
-    vector<pair<SurfacePoint,SurfacePoint>>& pairedSings = pairedSingsPerCell[cell.getIndex()]; // shorthand
-    vector<pair<SurfacePoint,SurfacePoint>> prunedPairedSings;
-
-    // Specify singular edges.
-    // Make sure there's at most one singularity per edge.
-    EdgeData<int> singOrder(cell.model().mesh(), 0); // 0, +i or -i where i is the order from 1 to n
-    vector<tuple<Halfedge, Halfedge, double>> singHalfedges; // half-edge points UP in terms of time function. Pruned and ordered. We also attach the time value
-    DEBUG_PRINT("Cell #{}:", cell.getIndex());
-    int nDroppedPairs = 0;
-    vector<pair<SurfacePoint,SurfacePoint>> droppedPairs;
-    for (int iPair = 0; iPair < pairedSings.size(); iPair++) {
-      auto &[s1,s2] = pairedSings[iPair];
-      double t1 = cell.timeFunction(s1), t2 = cell.timeFunction(s2);
-      ensure(abs(t1-t2) < 1e-9); // sanity check
-      Edge e1 = s1.edge, e2 = s2.edge;
-      if (singOrder[e1] != 0 || singOrder[e2] != 0) {
-        nDroppedPairs++;
-        // droppedPairs.push_back({cell.model().transferToParent(s1), cell.model().transferToParent(s2)});
-        droppedPairs.push_back({s1, s2});
-        continue;
-      } 
-      singOrder[e1] = +(iPair+1), singOrder[e2] = -(iPair+1);
-      Halfedge he1 = e1.halfedge(), he2 = e2.halfedge();
-      if (cell.timeFunction(he1.tipVertex()) < cell.timeFunction(he1.tailVertex())) he1 = he1.twin();
-      if (cell.timeFunction(he2.tipVertex()) < cell.timeFunction(he2.tailVertex())) he2 = he2.twin();
-      singHalfedges.push_back({he1, he2, t1});
-      prunedPairedSings.push_back({s1, s2});
-    }
-    DEBUG_PRINT("Dropped {} singularity pairs on cell #{}.", nDroppedPairs, cell.getIndex());
-
-    auto [droppedPos, droppedNeg] = unzip(droppedPairs);
-    cell.model().showSurfacePoints("dropped pos", droppedPos)->setEnabled(false);
-    cell.model().showSurfacePoints("dropped neg", droppedNeg)->setEnabled(false);
-    
-    auto [prunedPosSings, prunedNegSings] = unzip(prunedPairedSings);
-    cell.model().showSurfacePoints("pruned pos course sings", prunedPosSings)->setPointColor({1,0,0});
-    cell.model().showSurfacePoints("pruned neg course sings", prunedNegSings)->setPointColor({0,0,1});
-
-    // cell.model().addEdgeScalarQuantity("sing index", singIndex, polyscope::DataType::SYMMETRIC);
-
-    // Populate singIndex on parent
-    for (Edge e : cell.model().mesh().edges()) {
-      int order = singOrder[e];
-      Edge pe = cell.model().transferToParent(e); // parent edge
-      if (order > 0) singIndex[pe] = +1;
-      if (order < 0) singIndex[pe] = -1;
-    }
-
-    // Find paths connecting pairs of singularities
-    for (int iPair = 0; iPair < singHalfedges.size(); iPair++) {
-      auto& [he1, he2, tval] = singHalfedges[iPair];
-      // Halfedge phe1 = cell.model().transferToParent(he1), phe2 = cell.model().transferToParent(he2);
-
-      vector<Face> triangleStrip = traceIsolineTriangleStrip(he1, he2, tval, cell);
-      FaceData<double> triangleStripViz(cell.model().mesh()); listToMeshData(triangleStrip, triangleStripViz);
-      // cell.model().addFaceScalarQuantity(format("triangle strip (t={})", tval), triangleStripViz);
-
-      HalfedgeData<double> pathWeights(cell.model().mesh(), 0.0);
-      halfedgePathFromStrip(triangleStrip, singOrder, iPair, tval, cell, pathWeights);
-      // cell.model().addHalfedgeScalarQuantity(format("halfedge path (t={})", tval), pathWeights);
-
-      // Add constraint to model
-      constraints.constrainHalfedgePath(cell.model().transferToParent(pathWeights), 0, 0);
-    }
-
-    // Find paths between consecutive pairs of singularities for ordering constraints
-    // TODO
-  }
 
   // Add constraint that all faces should be non-singular
   constraints.constrainNonSingularFaces();
@@ -127,13 +106,40 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   // Boundary constraints: one-form is zero on boundary edges
   constraints.constrainBoundaries();
 
+  // Constrain Symmetric short row ends + Separatrix path routing + Ordering
+  for (auto& cell : morseDecomp.cells) {
+    auto& singHalfedges = singHalfedgesPerCell[cell.getIndex()];
+    auto& singOrder = singOrderPerCell[cell.getIndex()];
+    for (int iPair = 0; iPair < singHalfedges.size(); iPair++) {
+      auto& [he1, he2, tval] = singHalfedges[iPair];
+      Halfedge phe1 = cell.model().transferToParent(he1), phe2 = cell.model().transferToParent(he2);
+
+      vector<Face> triangleStrip = traceIsolineTriangleStrip(he1, he2, tval, cell);
+      FaceData<double> triangleStripViz(cell.model().mesh()); listToMeshData(triangleStrip, triangleStripViz);
+      // cell.model().addFaceScalarQuantity(format("triangle strip (t={})", tval), triangleStripViz);
+      HalfedgeData<double> pathWeights(cell.model().mesh(), 0.0);
+      halfedgePathFromStrip(triangleStrip, singOrder, iPair, tval, cell, pathWeights);
+      // cell.model().addHalfedgeScalarQuantity(format("halfedge path (t={})", tval), pathWeights);
+
+      // Constrain symmetric short row ends
+      constraints.constrainSymmetricShortRowEnds(phe1, phe2);
+
+      // Add constraint to model
+      constraints.constrainHalfedgePath(cell.model().transferToParent(pathWeights), 0, 0);
+
+      // Ordering constaints
+      // TODO
+    }
+  }
+
   constraints.setupSolver(solver);
+
+  // Final solver setup and solve
   solver.settings()->setPolish(true); // for more accurate results
   solver.settings()->setAbsoluteTolerance(1e-8);
   solver.settings()->setRelativeTolerance(1e-8);
   solver.settings()->setPrimalInfeasibilityTolerance(1e-8);
   solver.settings()->setDualInfeasibilityTolerance(1e-8);
-
   solver.initSolver();
   solver.solveProblem();
   Eigen::VectorXd solution = solver.getSolution();
