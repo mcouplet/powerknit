@@ -18,7 +18,7 @@ vector<pair<SurfacePoint,SurfacePoint>> SingularityMatcher::match(const vector<S
     double tavg = (t1+t2)/2;
     projectOnIsoline(p1, tavg);
     projectOnIsoline(p2, tavg);
-    assert(abs(timeFunction(p1) - timeFunction(p2)) < 1e-6); // sanity check
+    ensure(abs(timeFunction(p1) - timeFunction(p2)) < 1e-6); // sanity check
     matchedSings.push_back({p1,p2});
   }
 

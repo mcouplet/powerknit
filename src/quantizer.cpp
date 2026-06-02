@@ -67,6 +67,49 @@ vector<SurfacePoint> Quantizer::quantizeMeasure(VertexData<double>& measure, int
   vector<VertexData<double>> cellIndicators(nSites); // V_i(ψ)(x), eq. (16)
   // for (int i = 0; i < nSites; i++) cellIndicators.emplace_back(mesh);
 
+  // // PLAYING AROUND WITH HEAT KERNELS
+  // // Compute heat kernels
+  // vector<VertexData<double>> logHeatKernels(nSites);
+  // VertexData<double> maxLogHeatKernels(mesh, -DBL_MAX); // max over sites
+  // #pragma omp parallel for
+  // for (int iSite = 0; iSite < nSites; iSite++) {
+  //   int tid = omp_get_thread_num(); // thread ID
+  //   VertexData<double> impulse = computeRHS(sites[iSite]); // δ_i(x)
+  //   heatKernels[iSite] = vSolvers[tid].scalarDiffuse(impulse);
+  //   logHeatKernels[iSite] = VertexData<double>(mesh, 0.0);
+
+  //   for (Vertex v : mesh.vertices()) {
+  //     logHeatKernels[iSite][v] = log(heatKernels[iSite][v]);
+  //     maxLogHeatKernels[v] = max(maxLogHeatKernels[v], logHeatKernels[iSite][v]);
+  //   }
+  // }
+  // // Update sites with fixed weights
+  // VertexData<double> sumHeatKernels(mesh, 0.0);   // ∑_j k_t(p_j, x)
+  // for (int iSite = 0; iSite < nSites; iSite++) {
+  //   sumHeatKernels += heatKernels[iSite];
+  // }
+  // for (int iSite = 0; iSite < nSites; iSite++) {
+  //   knitModel.addVertexScalarQuantity(format("heat kernel {}", iSite), heatKernels[iSite]);
+  //   knitModel.addVertexScalarQuantity(format("log heat kernel {}", iSite), logHeatKernels[iSite]);
+  //   cellIndicators[iSite] = heatKernels[iSite] / sumHeatKernels;
+  // }
+  // knitModel.addPowerDiagram("power diagram", cellIndicators);
+  // vector<VertexData<double>> betterCellIndicators(nSites); // V_i(ψ)(x), eq. (16)
+  // for (int iSite = 0; iSite < nSites; iSite++) betterCellIndicators[iSite] = VertexData<double>(mesh, 0.0);
+  // for (Vertex v : mesh.vertices()) {
+  //   // compute softmax
+  //   double sumexp = 0;
+  //   for (int iSite = 0; iSite < nSites; iSite++)
+  //     sumexp += exp(logHeatKernels[iSite][v] - maxLogHeatKernels[v]);
+  //   for (int iSite = 0; iSite < nSites; iSite++)
+  //     betterCellIndicators[iSite][v] = exp(logHeatKernels[iSite][v] - maxLogHeatKernels[v]) / sumexp;
+  // }
+  // knitModel.addPowerDiagram("power diagram better", betterCellIndicators);
+  // polyscope::show();
+
+
+
+  // LLOYD ITERATIONS
   for (int it = 0; it < maxIt && !stop; it++) {
 
     // Save sites
@@ -155,21 +198,10 @@ vector<SurfacePoint> Quantizer::quantizeMeasure(VertexData<double>& measure, int
     if (it % 10 == 0) std::cout << "\n";
 
   }
-  cout << "\n";
+  cout << "\n\n";
 
   // Render fuzzy power diagram
-  vector<Vector3> cellColors(nSites);
-  for (int i = 0; i < nSites; i++) {
-    double r,g,b;
-    hsv_to_rgb((double)i/nSites * 360, 0.75, 1.0, r, g, b);
-    cellColors[i] = {r,g,b};
-  }
-  mt19937 rng(42);
-  shuffle(cellColors.begin(), cellColors.end(), rng);
-  VertexData<Vector3> powerDiagramColor(mesh, {0,0,0});
-  for (int i = 0; i < nSites; i++)
-    powerDiagramColor += cellColors[i] * cellIndicators[i];
-  knitModel.addVertexColorQuantity("power diagram", powerDiagramColor);
+  knitModel.addPowerDiagram("power diagram", cellIndicators);
 
   // // Also show indicator functions
   // for (int i = 0; i < nSites; i++)

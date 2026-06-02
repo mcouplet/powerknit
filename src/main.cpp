@@ -44,11 +44,13 @@ int main(int argc, char** argv) {
   // Set period if not provided
   if (!period) {
     knitModel.geom().requireShapeLengthScale();
-    period = 0.02 * knitModel.geom().shapeLengthScale;
+    period = 0.01 * knitModel.geom().shapeLengthScale;
   }
+
+  DEBUG_VAR(*period);
   
   // Compute time function, curl measures, and decompose into cylinders
-  TimeFunction timeFunction(knitModel);
+  TimeFunction timeFunction(knitModel, *period, *period);
   cout << "Stats after cutting:" << endl;
   knitModel.printStats();
 
@@ -63,7 +65,7 @@ int main(int argc, char** argv) {
 
   MorseDecomposition morseDecomp(timeFunction);
 
-  vector<pair<SurfacePoint,SurfacePoint>> allPairedCourseSings;
+  vector<vector<pair<SurfacePoint,SurfacePoint>>> pairedCourseSingsPerCell(morseDecomp.cells.size());
 
   for (auto& cell : morseDecomp.cells) {
 
@@ -75,12 +77,16 @@ int main(int argc, char** argv) {
 
     // Quantize to singularities
     Quantizer quantizer(cell.model());
-    double avgTotalMass = (quantizer.totalMass(cell.timeFunction.posCourseCurl) + quantizer.totalMass(cell.timeFunction.posCourseCurl)) / 2;
+    DEBUG_VAR(quantizer.totalMass(cell.timeFunction.posCourseCurl));
+    DEBUG_VAR(quantizer.totalMass(cell.timeFunction.negCourseCurl));
+    double avgTotalMass = (quantizer.totalMass(cell.timeFunction.posCourseCurl) + quantizer.totalMass(cell.timeFunction.negCourseCurl)) / 2;
     int nSings = avgTotalMass / *period;
     cout << format("Quantizing positive course curl measure to {} singularities.", nSings) << endl;
     vector<SurfacePoint> posCourseSings = quantizer.quantizeMeasure(cell.timeFunction.posCourseCurl, nSings);
+    cell.timeFunction.sortByTime(posCourseSings);
     cout << format("Quantizing negative course curl measure to {} singularities.", nSings) << endl;
     vector<SurfacePoint> negCourseSings = quantizer.quantizeMeasure(cell.timeFunction.negCourseCurl, nSings);
+    cell.timeFunction.sortByTime(negCourseSings);
     cell.model().showSurfacePoints("pos course sings", posCourseSings)->setPointColor({1,0,0})->setEnabled(false);
     cell.model().showSurfacePoints("neg course sings", negCourseSings)->setPointColor({0,0,1})->setEnabled(false);
 
@@ -89,17 +95,30 @@ int main(int argc, char** argv) {
     vector<pair<SurfacePoint,SurfacePoint>> matchedSings = singularityMatcher.match(posCourseSings, negCourseSings);
     vector<SurfacePoint> matchedPosCourseSings, matchedNegCourseSings;
     tie(matchedPosCourseSings, matchedNegCourseSings) = unzip(matchedSings);
-    cell.model().showSurfacePoints("matched pos course sings", matchedPosCourseSings)->setPointColor({1,0,0});
-    cell.model().showSurfacePoints("matched neg course sings", matchedNegCourseSings)->setPointColor({0,0,1});
+    cell.model().showSurfacePoints("matched pos course sings", matchedPosCourseSings)->setPointColor({1,0,0})->setEnabled(false);
+    cell.model().showSurfacePoints("matched neg course sings", matchedNegCourseSings)->setPointColor({0,0,1})->setEnabled(false);
 
-    // Transfer back to parent mesh
-    for (auto &[s1,s2] : matchedSings)
-      allPairedCourseSings.push_back({cell.model().transferToParent(s1), cell.model().transferToParent(s2)});
+    // // sanity check that sings are still aligned when transferring to parent
+    // vector<SurfacePoint> parentPosCourseSings, parentNegCourseSings;
+    // for (SurfacePoint& sp : matchedPosCourseSings) parentPosCourseSings.push_back(cell.model().transferToParent(sp));
+    // for (SurfacePoint& sp : matchedNegCourseSings) parentNegCourseSings.push_back(cell.model().transferToParent(sp));
+    // for (auto& singPair : matchedSings) {
+    //   SurfacePoint sp1 = cell.model().transferToParent(singPair.first), sp2 = cell.model().transferToParent(singPair.second);
+    // }
+
+    pairedCourseSingsPerCell[cell.getIndex()] = matchedSings;
+
+    // // Transfer back to parent mesh
+    // for (auto &[s1,s2] : matchedSings) {
+    //   SurfacePoint s1p = cell.model().transferToParent(s1);
+    //   SurfacePoint s2p = cell.model().transferToParent(s2);
+    //   // pairedCourseSingsPerCell[cell.getIndex()].push_back({s1p, s2p});
+    // }
   }
 
   // Stripes! The best part
-  Foliation foliation(timeFunction, knitModel);
-  foliation.computeCourse(allPairedCourseSings);
+  Foliation foliation(knitModel, morseDecomp);
+  foliation.computeCourse(pairedCourseSingsPerCell, *period);
 
 
   // This part should be done per cylinder once we have that figured out

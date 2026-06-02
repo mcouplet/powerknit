@@ -8,7 +8,7 @@
 
 using namespace std;
 
-TimeFunction::TimeFunction(KnitModel& _knitModel) : knitModel(_knitModel) {  
+TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double walePeriod) : knitModel(_knitModel) {  
 
   computeTimeFunction(_knitModel);
   knitModel.addVertexScalarQuantity("time function", timeFunction, polyscope::DataType::MAGNITUDE);
@@ -21,7 +21,8 @@ TimeFunction::TimeFunction(KnitModel& _knitModel) : knitModel(_knitModel) {
   cutSaddleLoops(_knitModel);
   findSaddles(); // hopefully they stay the same
 
-  computeTimeFunctionGrad();
+  knitModel.requireIntrinsicGrad();
+  timeFunctionGrad = knitModel.computeIntrinsicGrad<Vector2>(timeFunction);
   knitModel.addFaceTangentVectorQuantity("time function grad", timeFunctionGrad);
 
   // Compute course and wale guiding fields from time function gradient
@@ -161,6 +162,8 @@ void TimeFunction::computeTimeFunction(KnitModel& fullKnitModel) {
 
 void TimeFunction::computeTimeFunctionGrad() {
 
+
+
   // References, for convenience
   ManifoldSurfaceMesh& mesh = knitModel.mesh();
   EdgeLengthGeometry& geom = knitModel.geom();
@@ -214,13 +217,12 @@ void TimeFunction::computeCurl(const FaceData<Vector2>& field, VertexData<double
   ManifoldSurfaceMesh& mesh = knitModel.mesh();
   EdgeLengthGeometry& geom = knitModel.geom();
 
-
   geom.requireHalfedgeVectorsInFace(); // this will provide us the half-edges in the local basis of the faces
   geom.requireVertexDualAreas(); // the A_v's
   curl = VertexData<double>(mesh, 0.0);
   for (Halfedge he : mesh.interiorHalfedges()) {
     Vertex v = he.next().tipVertex();
-    if (!v.isBoundary())
+    if (!v.isBoundary()) // aren't we ignoring curl by doing this?
       curl[v] += (1./geom.vertexDualAreas[v]) * dot(field[he.face()], geom.halfedgeVectorsInFace[he]);
   }
 }

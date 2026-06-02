@@ -1,8 +1,9 @@
 #include "knit_model.h"
 #include "utils.h"
 #include <nlohmann/json.hpp>
-
+#include <igl/grad_intrinsic.h>
 #include "geometrycentral/surface/remeshing.h"
+
 
 using namespace std;
 using namespace geometrycentral;
@@ -28,7 +29,7 @@ KnitModel::KnitModel(const fs::path& inPath) {
 			ensure(fs::exists(vertexMappingsPath));
 
 			// Read mesh and geometry
-			tie(pGlobalMesh, pGlobalGeom) = readManifoldSurfaceMesh(modelPath);
+			tie(pGlobalMesh, pGlobalGeom) = readManifoldSurfaceMesh(modelPath);      
 
 			// Read vertex mappings
 			vector<pair<int,int>> vertexMappingIndices = readVertexMappings(vertexMappingsPath);
@@ -61,7 +62,6 @@ KnitModel::KnitModel(const fs::path& inPath) {
 	} else {
 			cout << "Input file extensions other than json are not yet supported." << endl;
 	}
-
 }
 
 void KnitModel::glueMesh() {
@@ -77,8 +77,12 @@ void KnitModel::glueMesh() {
   // Clear mappings
   vertexGlobalToGlued.clear();
   vertexGluedToGlobal.clear();
+  faceGlobalToGlued.clear();
+  faceGluedToGlobal.clear();
   halfedgeGlobalToGlued.clear();
   halfedgeGluedToGlobal.clear();
+  cornerGlobalToGlued.clear();
+  cornerGluedToGlobal.clear();
   edgeGlobalToGlued.clear();
   edgeGluedToGlobal.clear();
 
@@ -132,24 +136,43 @@ void KnitModel::glueMesh() {
     vertexGluedToGlobal[vGlued].push_back(vGlobal);
   }
 
+  // Populate faceGlobalToGlued and faceGluedToGlobal. They're bijections so it's easy.
+  // Also do corners while we're here
+  for (int i = 0; i < globalMesh.nFaces(); i++) {
+    Face fGlobal = globalMesh.face(i), fGlued = gluedMesh.face(i);
+    faceGlobalToGlued[fGlobal] = fGlued;
+    faceGluedToGlobal[fGlued] = {fGlobal};
+
+    for (auto itGlobal = fGlobal.adjacentCorners().begin(), itGlued = fGlued.adjacentCorners().begin();
+              itGlobal != fGlobal.adjacentCorners().end(); ++itGlobal, ++itGlued) {
+      Corner coGlobal = *itGlobal, coGlued = *itGlued;
+      cornerGlobalToGlued[coGlobal] = coGlued;
+      cornerGluedToGlobal[coGlued] = {coGlobal};
+    }
+  }
+
 	// In glued mesh, map (v1, v2) -> he
 	map<pair<Vertex,Vertex>, Halfedge> gluedVertexPairToHalfedge;
 	for (Halfedge he : gluedMesh.halfedges()) // includes exterior (boundary) halfedges
-			gluedVertexPairToHalfedge[{he.tailVertex(), he.tipVertex()}] = he;
+    gluedVertexPairToHalfedge[{he.tailVertex(), he.tipVertex()}] = he;
 	// Map global halfedges to glued halfedges, including exterior global halfedges
   // Also populate edge maps
 	for (Halfedge heGlobal : globalMesh.halfedges()) {
-			Halfedge heGlued = gluedVertexPairToHalfedge[{vertexGlobalToGlued[heGlobal.tailVertex()], vertexGlobalToGlued[heGlobal.tipVertex()]}];
-			halfedgeGlobalToGlued[heGlobal] = heGlued;
-      halfedgeGluedToGlobal[heGlued].push_back(heGlobal);
+    Halfedge heGlued = gluedVertexPairToHalfedge[{vertexGlobalToGlued[heGlobal.tailVertex()], vertexGlobalToGlued[heGlobal.tipVertex()]}];
+    halfedgeGlobalToGlued[heGlobal] = heGlued;
+    halfedgeGluedToGlobal[heGlued].push_back(heGlobal);
 	}
+  // Order half-edges in halfedgeGluedToGlobal so that interior comes first
+  for (Halfedge heGlued : gluedMesh.halfedges())
+    if (halfedgeGluedToGlobal[heGlued].size() == 2 && !halfedgeGluedToGlobal[heGlued][0].isInterior())
+      swap(halfedgeGluedToGlobal[heGlued][0], halfedgeGluedToGlobal[heGlued][1]);
   // Populate edgeGlobalToGlued and edgeGluedToGlobal
   for (Edge eGlobal : globalMesh.edges()) {
     Edge eGlued = halfedgeGlobalToGlued[eGlobal.halfedge()].edge();
     edgeGlobalToGlued[eGlobal] = eGlued;
     edgeGluedToGlobal[eGlued].push_back(eGlobal);
   }
-	
+
 	// Transfer edge lengths from global mesh to glued mesh
 	// Note that this is ambiguous if global edge lengths are inconsistent when glueing!
 	// Maybe we should average the two, or at least implement a check.
@@ -187,7 +210,7 @@ void KnitModel::printStats() {
 
 }
 
-polyscope::SurfaceVertexScalarQuantity* KnitModelInterface::addMeasure(std::string name, const VertexData<double>& data) {
+polyscope::SurfaceScalarQuantity* KnitModelInterface::addMeasure(std::string name, const VertexData<double>& data) {
   auto quantity = addVertexScalarQuantity(name, data, polyscope::DataType::MAGNITUDE);
   // Set upper bound so that 90% of the measure is shown
   double totalMass = 0;
@@ -210,8 +233,24 @@ polyscope::SurfaceVertexScalarQuantity* KnitModelInterface::addMeasure(std::stri
   return quantity;
 }
 
+polyscope::SurfaceVertexColorQuantity* KnitModelInterface::addPowerDiagram(std::string name, const std::vector<VertexData<double>>& cellIndicators) const {
+  int nCells = cellIndicators.size();
+  vector<Vector3> cellColors(nCells);
+  for (int i = 0; i < nCells; i++) {
+    double r,g,b;
+    hsv_to_rgb((double)i/nCells * 360, 0.75, 1.0, r, g, b);
+    cellColors[i] = {r,g,b};
+  }
+  mt19937 rng(42);
+  shuffle(cellColors.begin(), cellColors.end(), rng);
+  VertexData<Vector3> powerDiagramColor(mesh(), {0,0,0});
+  for (int i = 0; i < nCells; i++)
+    powerDiagramColor += cellColors[i] * cellIndicators[i];
+  return addVertexColorQuantity(name, powerDiagramColor);
+}
 
-SurfaceVertexScalarQuantity* KnitModel::addVertexScalarQuantity(string name, const VertexData<double>& data, DataType type) const {
+
+SurfaceScalarQuantity* KnitModel::addVertexScalarQuantity(string name, const VertexData<double>& data, DataType type) const {
 
   // Transfer data to global mesh
   VertexData<double> globalData(*pGlobalMesh);
@@ -236,11 +275,8 @@ SurfaceVertexParameterizationQuantity* KnitModel::addVertexParameterizationQuant
 }
 
 polyscope::SurfaceFaceScalarQuantity* KnitModel::addFaceScalarQuantity(string name, const FaceData<double>& data, polyscope::DataType type) const {
-
   return pPSMesh->addFaceScalarQuantity(name, data, type);
 }
-
-
 
 polyscope::SurfaceFaceTangentVectorQuantity* KnitModel::addFaceTangentVectorQuantity(string name, const FaceData<Vector2>& vectors) const {
   
@@ -252,6 +288,26 @@ polyscope::SurfaceFaceTangentVectorQuantity* KnitModel::addFaceTangentVectorQuan
     basisY[f] = pGlobalGeom->faceTangentBasis[f][1];
   }  
   return pPSMesh->addFaceTangentVectorQuantity(name, vectors, basisX, basisY);
+}
+
+polyscope::SurfaceEdgeScalarQuantity* KnitModel::addEdgeScalarQuantity(std::string name, const EdgeData<double>& data, polyscope::DataType type) const {
+  EdgeData<double> globalData(*pGlobalMesh); transferGluedToGlobal(data, globalData);
+  return pPSMesh->addEdgeScalarQuantity(name, globalData, type);
+}
+
+polyscope::SurfaceHalfedgeScalarQuantity* KnitModel::addHalfedgeScalarQuantity(std::string name, const HalfedgeData<double>& data, polyscope::DataType type) const {
+  HalfedgeData<double> globalData(*pGlobalMesh); transferGluedToGlobal(data, globalData);
+  return pPSMesh->addHalfedgeScalarQuantity(name, globalData, type);
+}
+
+polyscope::SurfaceCornerScalarQuantity* KnitModel::addCornerScalarQuantity(std::string name, const CornerData<double>& data, polyscope::DataType type) const {
+  CornerData<double> globalData(*pGlobalMesh); transferGluedToGlobal(data, globalData);
+  // The old prepareCornerData
+  vector<double> preparedData;
+  for (Face f : pGlobalMesh->faces())
+    for (Corner co : f.adjacentCorners())
+      preparedData.push_back(globalData[co]);
+  return pPSMesh->addCornerScalarQuantity(name, preparedData, type);
 }
 
 polyscope::PointCloud* KnitModel::showVertices(std::string name, const std::vector<Vertex>& vertices) const {
@@ -279,22 +335,42 @@ polyscope::CurveNetwork* KnitModel::showEdges(std::string name, const std::vecto
   return polyscope::registerCurveNetwork(name, positions, edgeIndices);
 }
 
-polyscope::PointCloud* KnitModel::showSurfacePoints(std::string name, const std::vector<SurfacePoint>& points) const {
+vector<Vector3> KnitModel::getSurfacePointPositions(const SurfacePoint& point) const {
+
   vector<Vector3> positions;
-  for (const SurfacePoint& point : points) {
+  VertexData<Vector3>& vpos = pGlobalGeom->vertexPositions;
+  if (point.type == SurfacePointType::Edge) {
+    double t = point.tEdge;
+    vector<Halfedge> hes = halfedgeGluedToGlobal.at(point.edge.halfedge());
+    Halfedge he = hes[0];
+    Vector3 pos = (1-t) * vpos[he.tailVertex()] + t * vpos[he.tipVertex()];
+    positions.push_back(pos);
+    if (hes.size() == 2) { // glued edge: add the second corresponding point
+      he = halfedgeGluedToGlobal.at(point.edge.halfedge().twin())[0];
+      pos = t * vpos[he.tailVertex()] + (1-t) * vpos[he.tipVertex()];
+      positions.push_back(pos);
+    }
+  } else if (point.type == SurfacePointType::Face) {
     SurfacePoint facePoint = point.inSomeFace();
     Face gluedFace = facePoint.face;
     Face globalFace = pGlobalMesh->face(gluedFace.getIndex()); // use the fact that face indices coincide between glued and global meshes
     Vector3 pos = Vector3::zero();
     Halfedge he = globalFace.halfedge();
     for (int i = 0; i < 3; i++) {
-      pos += facePoint.faceCoords[i] * pGlobalGeom->vertexPositions[he.vertex()];
+      pos += facePoint.faceCoords[i] * vpos[he.vertex()];
       he = he.next();
     }
     positions.push_back(pos);
-    // positions.push_back(point.interpolate(pGlobalGeom->vertexPositions));
   }
-  return polyscope::registerPointCloud(name, positions);
+  return positions;
+}
+
+polyscope::PointCloud* KnitModel::showSurfacePoints(std::string name, const std::vector<SurfacePoint>& points) const {
+  vector<Vector3> positions;
+  for (const SurfacePoint& point : points) {
+    positions += getSurfacePointPositions(point);
+  }
+  return polyscope::registerPointCloud(name, positions)->setPointRadius(0.0025);
 }
 
 
@@ -306,6 +382,44 @@ polyscope::CurveNetwork* KnitModel::showSeparatrices() const {
       sepEdges.push_back(e);
   return showGlobalEdges("separatrices", sepEdges);
 }
+
+polyscope::CurveNetwork* KnitModel::showSurfacePointNetwork(string name, const vector<SurfacePoint>& points, const vector<pair<int,int>>& adj) const {
+  
+  // Not super elegant to have duplicate nodes, but this is just for viz.
+
+  VertexData<Vector3>& vpos = pGlobalGeom->vertexPositions;
+
+  vector<Vector3> nodes;
+  vector<array<size_t,2>> edges;
+
+  for (auto& [i,j] : adj) {
+    const SurfacePoint &pi = points[i], &pj = points[j];
+    // pi and pj share a face: find which one
+    Face sharedFace;
+    for (Face fi : pi.edge.adjacentFaces())
+      for (Face fj : pj.edge.adjacentFaces())
+        if (fi == fj)
+          sharedFace = fi;
+    
+    auto getPosition = [&](const SurfacePoint& p) { // get the 3D position of some surface point in the shared face
+      double t = p.tEdge;
+      Halfedge he = p.edge.halfedge(); if (he.face() != sharedFace) he = he.twin(), t = 1-t;
+      for (Halfedge heGlobal : halfedgeGluedToGlobal.at(he)) {
+        if (heGlobal.isInterior())
+          return (1-t) * vpos[heGlobal.tailVertex()] + t * vpos[heGlobal.tipVertex()];
+      }
+      return Vector3();
+    };
+
+    nodes.push_back(getPosition(pi));
+    nodes.push_back(getPosition(pj));
+    edges.push_back({nodes.size()-2, nodes.size()-1});
+
+  }
+
+  return polyscope::registerCurveNetwork(name, nodes, edges);
+}
+
 
 // polyscope::CurveNetwork* KnitModel::showTraces(std::string name, const EdgeData<vector<SurfacePoint>>& traces) const {
 //   for (int e = 0; e < traces.size(); e++) { // edges on *intrinsic* mesh
@@ -408,46 +522,98 @@ void KnitModel::cutAlongIsoline(VertexData<double>& field, double value, vector<
   }
 }
 
+
 void KnitModel::registerPSMesh(string name) {
-  pPSMesh = polyscope::registerSurfaceMesh(name, pGlobalGeom->vertexPositions, pGlobalMesh->getFaceVertexList());
+
+  ManifoldSurfaceMesh& globalMesh = *pGlobalMesh; // shorthand
+  pPSMesh = polyscope::registerSurfaceMesh(name, pGlobalGeom->vertexPositions, globalMesh.getFaceVertexList());
   pPSMesh->setSurfaceColor({1,1,1}); // white mesh
+
+  // Set edge permutation
+  EdgeData<bool> visited(globalMesh, false);
+  vector<size_t> edgePerm;
+  for (Face f : globalMesh.faces()) {
+    for (Edge e : f.adjacentEdges()) {
+      if (!visited[e]) {
+        visited[e] = true;
+        edgePerm.push_back(e.getIndex());
+      }
+    }
+  }
+  pPSMesh->setEdgePermutation(edgePerm);
+
+  // Set half-edge permutation
+  vector<size_t> halfedgePerm;
+  for (Face f : globalMesh.faces()) {
+    for (Halfedge he : f.adjacentHalfedges()) {
+      halfedgePerm.push_back(he.getIndex());
+    }
+  }
+  pPSMesh->setHalfedgePermutation(halfedgePerm);
 }
 
-KnitSubModel::KnitSubModel(const KnitModelInterface& _parent, const std::vector<Face>& faces) : id(nSubModels++), parent(_parent) {
+KnitSubModel::KnitSubModel(const KnitModelInterface& _parent, const vector<Face>& faces, const vector<vector<Corner>>& cornersToRemap) : id(nSubModels++), parent(_parent) {
 
-  int vertexId = 0, faceId = 0;
-  map<Vertex, size_t> vertexParentToSub;
+  size_t vertexId = 0, faceId = 0;
+
+  map<Vertex, vector<size_t>> vertexParentToSub; // saddle vertices can map to ≤2 vertices in sub-mesh
   map<Face, size_t> faceParentToSub;
   vector<vector<size_t>> polygons;
   for (Face f : faces) {
     vector<size_t> poly;
     for (Vertex v : f.adjacentVertices()) {
-      if (!vertexParentToSub.count(v))
-        vertexParentToSub[v] = vertexId++;
-      poly.push_back(vertexParentToSub[v]);
+      if (!vertexParentToSub.count(v)) {
+        vertexParentToSub[v] = {vertexId++};
+      }
+      poly.push_back(vertexParentToSub[v][0]);
     }
     polygons.push_back(poly);
     faceParentToSub[f] = faceId++;
   }
 
+  // Remap saddle corners if needed
+  // TODO: finish THIS!!
+  for (const vector<Corner>& corners : cornersToRemap) {
+    Vertex saddle = corners[0].vertex();
+    size_t saddleSub = vertexParentToSub[saddle][0];
+    vertexParentToSub[saddle].push_back(vertexId);
+    for (Corner co : corners) {
+      // find index inside face (bit annoying but okay)
+      vector<size_t>& poly = polygons[faceParentToSub[co.face()]];
+      for (int i = 0; i < poly.size(); i++) {
+        if (poly[i] == saddleSub)
+          poly[i] = vertexId;
+      }
+    }
+    vertexId++;
+    // DEBUG_VAR(vertexParentToSub[saddle]);
+  }
+
   pMesh = make_unique<ManifoldSurfaceMesh>(polygons);
 
   // Map vertices from sub to parent
-  for (auto [v,i] : vertexParentToSub)
-    vertexToParent[mesh().vertex(i)] = v;
+  for (auto [v,subVerts] : vertexParentToSub)
+    for (auto i : subVerts)
+      vertexToParent[mesh().vertex(i)] = v;
 
   // Map faces from sub to parent
   for (auto [f,i] : faceParentToSub)
     faceToParent[mesh().face(i)] = f;
 
-  // Map edges from sub to parents
+  // Map edges and half-edges from sub to parents
   map<pair<Vertex,Vertex>,Halfedge> vertexPairToHalfedge;
   for (Halfedge he : parent.mesh().halfedges())
     vertexPairToHalfedge[{he.tailVertex(), he.tipVertex()}] = he;
   for (Edge e : mesh().edges()) {
     Vertex pv1 = vertexToParent[e.firstVertex()], pv2 = vertexToParent[e.secondVertex()]; // parent vertices
     edgeToParent[e] = vertexPairToHalfedge[{pv1,pv2}].edge();
-  }    
+  }
+  for (Halfedge he : mesh().halfedges()) {
+    Vertex pv1 = vertexToParent[he.tailVertex()], pv2 = vertexToParent[he.tipVertex()]; // parent vertices
+    Halfedge phe = vertexPairToHalfedge[{pv1,pv2}];
+    halfedgeToParent[he] = phe;
+    cornerToParent[he.corner()] = phe.corner();
+  }
 
   // Get edge lengths on sub-model and create geometry
   EdgeData<double> edgeLengths(mesh());
@@ -458,11 +624,19 @@ KnitSubModel::KnitSubModel(const KnitModelInterface& _parent, const std::vector<
 
 // SUB-MODEL VIZ FUNCTIONS
 
-polyscope::SurfaceVertexScalarQuantity* KnitSubModel::addVertexScalarQuantity(std::string name, const VertexData<double>& data, polyscope::DataType type) const {
-  VertexData<double> parentData(parent.mesh(), 0.0); // maybe the default value should be a parameter?
-  for (Vertex v : mesh().vertices())
-    parentData[vertexToParent.at(v)] = data[v];
-  return parent.addVertexScalarQuantity(format("[{}] {}", id, name), parentData, type);
+polyscope::SurfaceScalarQuantity* KnitSubModel::addVertexScalarQuantity(std::string name, const VertexData<double>& data, polyscope::DataType type) const {
+
+  CornerData<double> parentData(parent.mesh(), 0.0);
+  for (Face f : mesh().faces()) {
+    for (Corner co : f.adjacentCorners())
+      parentData[cornerToParent.at(co)] = data[co.vertex()];
+  }
+  return parent.addCornerScalarQuantity(format("[{}] {}", id, name), parentData, type);
+
+  // VertexData<double> parentData(parent.mesh(), 0.0); // maybe the default value should be a parameter?
+  // for (Vertex v : mesh().vertices())
+  //   parentData[vertexToParent.at(v)] = data[v];
+  // return parent.addVertexScalarQuantity(format("[{}] {}", id, name), parentData, type);
 }
 
 polyscope::SurfaceVertexColorQuantity* KnitSubModel::addVertexColorQuantity(string name, const VertexData<Vector3>& data) const {
@@ -489,6 +663,21 @@ polyscope::SurfaceFaceTangentVectorQuantity* KnitSubModel::addFaceTangentVectorQ
   for (Face f : mesh().faces())
     parentData[faceToParent.at(f)] = data[f];
   return parent.addFaceTangentVectorQuantity(format("[{}] {}", id, name), parentData);
+}
+
+polyscope::SurfaceEdgeScalarQuantity* KnitSubModel::addEdgeScalarQuantity(std::string name, const EdgeData<double>& data, polyscope::DataType type) const {
+  EdgeData<double> parentData(parent.mesh()); transferToParent(data, parentData);
+  return parent.addEdgeScalarQuantity(format("[{}] {}", id, name), parentData, type);
+}
+
+polyscope::SurfaceHalfedgeScalarQuantity* KnitSubModel::addHalfedgeScalarQuantity(std::string name, const HalfedgeData<double>& data, polyscope::DataType type) const {
+  HalfedgeData<double> parentData(parent.mesh()); transferToParent(data, parentData);
+  return parent.addHalfedgeScalarQuantity(format("[{}] {}", id, name), parentData, type);
+}
+
+polyscope::SurfaceCornerScalarQuantity* KnitSubModel::addCornerScalarQuantity(std::string name, const CornerData<double>& data, polyscope::DataType type) const {
+  CornerData<double> parentData(parent.mesh()); transferToParent(data, parentData);
+  return parent.addCornerScalarQuantity(format("[{}] {}", id, name), parentData, type);
 }
 
 polyscope::PointCloud* KnitSubModel::showVertices(std::string name, const std::vector<Vertex>& vertices) const {
@@ -519,12 +708,33 @@ SurfacePoint KnitSubModel::transferToParent(const SurfacePoint& point) const {
   if (point.type == SurfacePointType::Vertex) {
     return SurfacePoint(vertexToParent.at(point.vertex));
   } else if (point.type == SurfacePointType::Edge) {
-    return SurfacePoint(edgeToParent.at(point.edge), point.tEdge);
+    // We have to be careful because edge endpoints might be swapped between sub and parent (not quite sure how this can happen)
+    Edge e = point.edge, pe = edgeToParent.at(e);
+    bool isFlipped = (vertexToParent.at(e.firstVertex()) == pe.secondVertex());
+    // DEBUG_VAR(vertexToParent.at(e.firstVertex()) == pe.firstVertex());
+    // DEBUG_VAR(vertexToParent.at(e.firstVertex()) == pe.secondVertex());
+    double t = (isFlipped) ? 1-point.tEdge : point.tEdge;
+    return SurfacePoint(pe, t);
   } else {
     return SurfacePoint(faceToParent.at(point.face), point.faceCoords);
   }  
 }
 
+void KnitModelInterface::requireIntrinsicGrad() {
+  // Setup matrices that IGL needs
+  // Be careful with index convention! Edge i is opposite vertex i
+  Eigen::MatrixXd L(mesh().nFaces(), 3); // edge lengths
+  Eigen::MatrixXi F(mesh().nFaces(), 3); // face vertex indices
+  for (Face face : mesh().faces()) {
+      Halfedge he = face.halfedge();
+      for (int i = 0; i < 3; i++) {
+          L(face.getIndex(), i) = geom().edgeLengths[he.edge()];
+          F(face.getIndex(), (i+1)%3) = he.tailVertex().getIndex();
+          he = he.next();
+      }
+  }
+  igl::grad_intrinsic(L, F, G);
+}
 
 // HELPERS
 

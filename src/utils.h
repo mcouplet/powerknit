@@ -1,21 +1,40 @@
+#pragma once
 
 #include <unordered_map>
+#include "geometrycentral/surface/surface_mesh.h"
 
 #undef NDEBUG // for now so that we can run in RelWithDebInfo
 
 // Print macros that only fire up in Debug mode
 #ifndef NDEBUG
-    #define DEBUG_PRINT(x) std::cout << x << std::endl;
+  #define DEBUG_PRINT(...) std::cout << std::format(__VA_ARGS__) << std::endl;
+  #define DEBUG_VAR(x) std::cout << #x << ": " << (x) << std::endl
 #else
-    #define DEBUG_PRINT(x)
+  #define DEBUG_PRINT(x)
+  #define DEBUG_VAR(x)
 #endif
 
-#define DEBUG_VAR(x) DEBUG_PRINT(#x << ": " << (x))
+template <typename T>
+bool between(T x, T a, T b) { return ((x - a) * (x - b)) <= 0; }
+
+template <typename T>
+bool between(T x, std::pair<T,T> p) { return between(x, p.first, p.second); }
 
 // To print pairs easily
 template<class T1, class T2> std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> v) {
   os << "(" << v.first << ", " << v.second << ")";
   return os;
+}
+
+// To print tuples easily
+template<typename... Ts>
+std::ostream& operator<<(std::ostream& os, const std::tuple<Ts...>& t) {
+    os << "(";
+    std::apply([&os](const auto&... args) {
+        size_t i = 0;
+        ((os << (i++ ? ", " : "") << args), ...);
+    }, t);
+    return os << ")";
 }
 
 // To print vectors easily
@@ -42,6 +61,13 @@ std::pair<std::vector<T>, std::vector<T>> unzip(const std::vector<std::pair<T,T>
     vecs.second.push_back(b);
   }
   return vecs;
+}
+
+// Append operator for std::vector
+template <typename T>
+std::vector<T>& operator+=(std::vector<T>& a, const std::vector<T>& b) {
+  a.insert(a.end(), b.begin(), b.end());
+  return a;
 }
 
 // A Union Find data structure templated on element type T.
@@ -76,4 +102,40 @@ public:
     bool connected(T x, T y) { return find(x) == find(y); }
     // Return the number of disjoint sets.
     int count() { return cnt; }
+    // Group items into sets
+    std::vector<std::vector<T>> group() {
+      std::vector<std::vector<T>> groups(count());
+      std::unordered_map<T, int> compactIdx; int currIdx = 0;
+      for (auto& [x,_] : id) {
+        T xp = find(x);
+        if (!compactIdx.count(xp))
+          compactIdx[xp] = currIdx++;
+        groups[compactIdx[xp]].push_back(x);
+      }
+      return groups;
+    }
 };
+
+inline bool isClose(double a, double b, double tol=1e-9) {
+  return std::abs(a-b) < tol;
+}
+
+using namespace geometrycentral;
+using namespace geometrycentral::surface;
+
+
+template <typename E, typename T>
+void listToMeshData(const std::vector<E> elems, geometrycentral::MeshData<E,T>& meshData) {
+  meshData.fill(0);
+  for (auto e : elems)
+    meshData[e] = 1;
+}
+
+template <typename E>
+auto elementsOf(geometrycentral::surface::SurfaceMesh& mesh) {
+  if constexpr (std::is_same_v<E, Vertex>)    return mesh.vertices();
+  if constexpr (std::is_same_v<E, Face>)      return mesh.faces();
+  if constexpr (std::is_same_v<E, Edge>)      return mesh.edges();
+  if constexpr (std::is_same_v<E, Halfedge>)  return mesh.halfedges();
+  if constexpr (std::is_same_v<E, Corner>)    return mesh.corners();
+}

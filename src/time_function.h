@@ -7,7 +7,7 @@
 class TimeFunction {
 
 public:
-  TimeFunction(KnitModel& _knitModel);
+  TimeFunction(KnitModel& _knitModel, double coursePeriod, double walePeriod); // TODO: I think the saddle loop cutting should be done in a separate function. We need the periods to correctly scale the guiding fields and curl measures!
   TimeFunction(KnitSubModel& _knitModel, const TimeFunction& parent); // takes care of transferring useful quantities from parent
 
   KnitModelInterface& knitModel; // can either be a KnitModel or a KnitSubModel. Keeping it public so that we can do some viz
@@ -22,6 +22,13 @@ public:
 
   void morseDecompose();
 
+  template <typename T> // either SurfacePoint or Vertex
+  void sortByTime(std::vector<T>& points) {
+    sort(points.begin(), points.end(), [this](const T& a, const T& b) {
+      return (*this)(a) < (*this)(b);
+    });
+  }
+
   // For the Morse decomposition, we need to decide if we want cylinders
   // to be just a subset of the original mesh (i.e., drop the triangles that are intersected by saddle loops),
   // or do we want a new mesh.
@@ -30,6 +37,7 @@ public:
 
   double operator()(const SurfacePoint& sp) const { return sp.interpolate(timeFunction); }
   double operator()(Vertex v) const { return timeFunction[v]; }
+  std::pair<double,double> operator()(Halfedge he) const { return {timeFunction[he.tailVertex()], timeFunction[he.tipVertex()]}; }
 
 private:
 

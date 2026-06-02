@@ -86,6 +86,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(polyscope)
 
 # libigl (header-only core)
+# Used to compute gradient operators
 FetchContent_Declare(
     libigl
     GIT_REPOSITORY https://github.com/libigl/libigl.git
@@ -103,6 +104,48 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(lbfgspp)
+
+# TinyAD (header-only automatic differentiation)
+FetchContent_Declare(
+    TinyAD
+    GIT_REPOSITORY https://github.com/patr-schm/TinyAD.git
+    GIT_TAG        main
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(TinyAD)
+
+# OSQP — must be declared before osqp-eigen so osqp::osqp target exists when
+# OsqpEigenDependencies.cmake runs its target check (skipping find_package)
+FetchContent_Declare(
+    osqp
+    GIT_REPOSITORY https://github.com/osqp/osqp.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(osqp)
+# FetchContent builds 'osqp'/'osqpstatic' but not the namespaced aliases that
+# osqp-eigen's dependency check looks for; create them manually.
+if(TARGET osqpstatic AND NOT TARGET osqp::osqpstatic)
+    add_library(osqp::osqpstatic ALIAS osqpstatic)
+endif()
+if(TARGET osqp AND NOT TARGET osqp::osqp)
+    add_library(osqp::osqp ALIAS osqp)
+endif()
+
+# Pre-define OSQP version flags so osqp-eigen skips its try_compile checks
+# (try_compile can't resolve ALIAS targets from the FetchContent build tree).
+# OSQP master is v1.x, so both flags are TRUE.
+set(OSQP_IS_V1       TRUE CACHE BOOL "" FORCE)
+set(OSQP_IS_V1_FINAL TRUE CACHE BOOL "" FORCE)
+
+# OsqpEigen (Eigen wrapper for OSQP)
+FetchContent_Declare(
+    osqp_eigen
+    GIT_REPOSITORY https://github.com/gbionics/osqp-eigen.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(osqp_eigen)
 
 # ── OpenMP (Apple Silicon / Homebrew libomp) ──────────────────────────────────
 if(APPLE)
@@ -143,5 +186,7 @@ target_link_libraries(powerknit PRIVATE
     nlohmann_json::nlohmann_json
     igl::core
     lbfgspp
+    TinyAD
+    OsqpEigen::OsqpEigen
     ${OpenMP_CXX_LIBRARIES}
 )
