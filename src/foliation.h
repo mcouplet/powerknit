@@ -38,12 +38,16 @@ private:
 
   std::tuple<std::vector<SurfacePoint>, std::vector<std::pair<int,int>>> traceStripes(CornerData<double>& stripeValues, double period);
 
-  struct Constraints {
+  class Constraints {
+
+  private:
     const KnitModel& knitModel;
     std::vector<Eigen::Triplet<double>> triplets; // matrix entries
     std::vector<double> lbs, ubs; // lower and upper bounds
+    Vector<double> lbOsqp, ubOsqp; // we need these to outlive setupSolver
     int m = 0; // current number of constraints
 
+  public:
     Constraints (const KnitModel& knitModel) : knitModel(knitModel) {}
 
     void constrainHalfedgePath(const HalfedgeData<double>& weights, double lb, double ub) {
@@ -96,13 +100,12 @@ private:
       // ensure(lbs.size() == m); ensure(ubs.size() == m);
       Eigen::SparseMatrix<double> C(m, knitModel.mesh().nHalfedges());
       C.setFromTriplets(triplets.begin(), triplets.end());
-      Vector<double> lb = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
-      Vector<double> ub = Eigen::Map<Vector<double>>(ubs.data(), ubs.size());
-      DEBUG_VAR(knitModel.mesh().nHalfedges());
+      lbOsqp = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
+      ubOsqp = Eigen::Map<Vector<double>>(ubs.data(), ubs.size());
       solver.data()->setNumberOfConstraints(m);
       solver.data()->setLinearConstraintsMatrix(C);
-      solver.data()->setLowerBound(lb);
-      solver.data()->setUpperBound(ub);
+      solver.data()->setLowerBound(lbOsqp);
+      solver.data()->setUpperBound(ubOsqp);
     }
 
   };

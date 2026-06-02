@@ -33,18 +33,16 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
     return geom.faceAreas[face] * (gu - gu_target).squaredNorm();
   });
   auto [c, grad, hess] = obj.eval_with_derivatives(Eigen::VectorXd::Zero(mesh.nHalfedges()));
+  solver.data()->setNumberOfVariables(mesh.nHalfedges());
+  solver.data()->setHessianMatrix(hess);
+  solver.data()->setGradient(grad);
 
   // Setup constraints
   // vector<Eigen::Triplet<double>> conTriplets; // constraint triplets
   // vector<double> lbs, ubs; // lower and upper bounds
   // int nCon = 0; // current constraint
 
-  Constraints constraints(knitModel); DEBUG_VAR(constraints.m);
-  auto& conTriplets = constraints.triplets;
-  auto& lbs = constraints.lbs;
-  auto& ubs = constraints.ubs;
-  auto& nCon = constraints.m;
-  
+  Constraints constraints(knitModel);
 
   // Put singularities on edges and make sure there's only 1 per edge
   EdgeData<int> singIndex(mesh, 0); // 0, +1 or -1
@@ -112,14 +110,7 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
       // cell.model().addHalfedgeScalarQuantity(format("halfedge path (t={})", tval), pathWeights);
 
       // Add constraint to model
-      for (Halfedge he : cell.model().mesh().halfedges()) {
-        if (pathWeights[he] != 0) {
-          Halfedge phe = cell.model().transferToParent(he);
-          conTriplets.emplace_back(nCon, phe.getIndex(), pathWeights[he]);
-        }
-      }
-      lbs.push_back(0); ubs.push_back(0);
-      nCon++;
+      constraints.constrainHalfedgePath(cell.model().transferToParent(pathWeights), 0, 0);
     }
 
     // Find paths between consecutive pairs of singularities for ordering constraints
@@ -127,58 +118,19 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   }
 
   // Add constraint that all faces should be non-singular
-  for (Face f : mesh.faces()) {
-    for (Halfedge he : f.adjacentHalfedges())
-      conTriplets.emplace_back(nCon, he.getIndex(), 1);
-    lbs.push_back(0); ubs.push_back(0);
-    nCon++;
-  }
+  constraints.constrainNonSingularFaces();
 
   // Constrain edge indices. The -1's come from the fact that we're computing d1 *inside the bigon*.
-  for (Edge e : mesh.edges()) {
-    conTriplets.emplace_back(nCon, e.halfedge().getIndex(), -1);
-    conTriplets.emplace_back(nCon, e.halfedge().twin().getIndex(), -1);
-    lbs.push_back(period*singIndex[e]); ubs.push_back(period*singIndex[e]);
-    nCon++;
-  }
+  constraints.constrainEdgeIndices(singIndex, period);
 
   // Boundary constraints: one-form is zero on boundary edges
-  for (BoundaryLoop bloop : mesh.boundaryLoops()) {
-    for (Halfedge he : bloop.adjacentHalfedges()) {
-      conTriplets.emplace_back(nCon, he.getIndex(), 1);
-      lbs.push_back(0); ubs.push_back(0);
-      nCon++;
-    }
-  }
+  constraints.constrainBoundaries();
 
-  DEBUG_VAR(&constraints.knitModel.mesh());
-  DEBUG_VAR(&mesh);
-
-
-  solver.data()->setNumberOfVariables(mesh.nHalfedges());
-  solver.data()->setHessianMatrix(hess);
-  solver.data()->setGradient(grad);
-
-  // // For some reason the solver behaves differently with this. We should investigate why
-  // constraints.setupSolver(solver);
-
-  // DEBUG_VAR(nCon - constraints.m);
-
-  Eigen::SparseMatrix<double> con(nCon, mesh.nHalfedges());
-  con.setFromTriplets(conTriplets.begin(), conTriplets.end());
-  Vector<double> lb = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
-  Vector<double> ub = Eigen::Map<Vector<double>>(ubs.data(), ubs.size());
-  solver.data()->setNumberOfConstraints(nCon);
-  solver.data()->setLinearConstraintsMatrix(con);
-  solver.data()->setLowerBound(lb);
-  solver.data()->setUpperBound(ub);
-
+  constraints.setupSolver(solver);
   solver.settings()->setPolish(true); // for more accurate results
   solver.initSolver();
   solver.solveProblem();
   Eigen::VectorXd solution = solver.getSolution();
-  // sizes are ok
-  // DEBUG_VAR(solver.getStatus())
 
   HalfedgeData<double> sigma(mesh, solution);
   knitModel.addHalfedgeScalarQuantity("sigma", sigma, polyscope::DataType::SYMMETRIC);
@@ -194,7 +146,6 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
     for (Halfedge he : e.adjacentHalfedges())
       d1Bsigma[e] += sigma[he];
   knitModel.addEdgeScalarQuantity("d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
-  // DEBUG_VAR(d1Bsigma[mesh.edge(1871)])
 
   CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma);
   knitModel.addCornerScalarQuantity("stripe values", stripeValues);
