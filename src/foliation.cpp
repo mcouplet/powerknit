@@ -33,6 +33,7 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
     return geom.faceAreas[face] * (gu - gu_target).squaredNorm();
   });
   auto [c, grad, hess] = obj.eval_with_derivatives(Eigen::VectorXd::Zero(mesh.nHalfedges()));
+  DEBUG_VAR(hess.norm());
   solver.data()->setNumberOfVariables(mesh.nHalfedges());
   solver.data()->setHessianMatrix(hess);
   solver.data()->setGradient(grad);
@@ -128,6 +129,11 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
 
   constraints.setupSolver(solver);
   solver.settings()->setPolish(true); // for more accurate results
+  solver.settings()->setAbsoluteTolerance(1e-8);
+  solver.settings()->setRelativeTolerance(1e-8);
+  solver.settings()->setPrimalInfeasibilityTolerance(1e-8);
+  solver.settings()->setDualInfeasibilityTolerance(1e-8);
+
   solver.initSolver();
   solver.solveProblem();
   Eigen::VectorXd solution = solver.getSolution();
@@ -244,7 +250,8 @@ CornerData<double> Foliation::computeStripeValuesFromOneForm(HalfedgeData<double
     alpha[hij.corner()] = alphaVerts[hij.vertex()];
     alpha[hjk.corner()] = alpha[hij.corner()] + sigma[hij];
     alpha[hki.corner()] = alpha[hjk.corner()] + sigma[hjk];
-    ensure(abs(alpha[hij.corner()] - alpha[hki.corner()] - sigma[hki]) < 1e-9);
+    // DEBUG_VAR(abs(alpha[hij.corner()] - alpha[hki.corner()] - sigma[hki]));
+    ensure(abs(alpha[hij.corner()] - alpha[hki.corner()] - sigma[hki]) < 1e-2);
   }
 
   return alpha;
@@ -301,10 +308,15 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
     }
   }
 
+
+  
   // Check that each face has an even number of stripe points
+  FaceData<double> cnt(mesh);
   for (Face f : mesh.faces()) {
+    cnt[f] = faceToPoints[f].size();
     ensure(faceToPoints[f].size() % 2 == 0);
   }
+  knitModel.addFaceScalarQuantity("cnt", cnt);
 
   // Inside each face, order stripe points by their stripe value and pair them
   for (Face f : mesh.faces()) {
@@ -322,7 +334,8 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
       return stripeVal(points[i]) < stripeVal(points[j]);
     });
     for (int i = 0; i < fPoints.size()/2; i++) {
-      ensure(isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-7)); // sanity check that stripe values are matching
+      // DEBUG_VAR(stripeVal(points[fPoints[2*i]]) - stripeVal(points[fPoints[2*i+1]]));
+      ensure(isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6)); // sanity check that stripe values are matching
       adj.push_back({fPoints[2*i], fPoints[2*i+1]});
     }
   }

@@ -60,9 +60,7 @@ private:
     void constrainNonSingularFaces() {
       // Skip one face: sum(face rows) + sum(boundary rows) + sum(edge rows) = 0,
       // so the last face constraint is implied by all others when singularities balance.
-      int n = knitModel.mesh().nFaces(), i = 0;
       for (Face f : knitModel.mesh().faces()) {
-        if (++i == n) break;
         for (Halfedge he : f.adjacentHalfedges())
           triplets.emplace_back(m, he.getIndex(), 1);
         lbs.push_back(0); ubs.push_back(0);
@@ -102,6 +100,7 @@ private:
       C.setFromTriplets(triplets.begin(), triplets.end());
       lbOsqp = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
       ubOsqp = Eigen::Map<Vector<double>>(ubs.data(), ubs.size());
+      DEBUG_VAR(C.norm());
       solver.data()->setNumberOfConstraints(m);
       solver.data()->setLinearConstraintsMatrix(C);
       solver.data()->setLowerBound(lbOsqp);
