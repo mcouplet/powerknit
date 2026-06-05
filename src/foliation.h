@@ -17,12 +17,10 @@ public:
   // Singularity pairs *must be sorted*.
   // Pairs are (+1, -1)
   void computeCourse(std::vector<std::vector<std::pair<SurfacePoint,SurfacePoint>>> pairedSingsPerCell, double period);
-  void computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings);
-  
-  // OSQP (Operator Splitting Quadratic Program) solver.
-  // We'll re-use it for both course and wale stripes.
-  OsqpEigen::Solver solver;
 
+  // Singularities are SurfacePoint's on faces *of the parent mesh*.
+  void computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings, double period);
+  
 private:
 
   const KnitModel& knitModel; // the full model with b.c.'s. Can't infer it from the Morse decomposition.
@@ -56,6 +54,12 @@ private:
         if (weights[he] != 0)
           triplets.emplace_back(m, he.getIndex(), weights[he]);
       lbs.push_back(lb); ubs.push_back(ub); m++;
+    }
+
+    void constrainHalfedgePath(const std::vector<Halfedge>& halfedges, double lb, double ub) {
+      for (Halfedge he : halfedges)
+        triplets.emplace_back(m, he.getIndex(), 1);
+      lbs.push_back(lb); ubs.push_back(ub); m++;      
     }
 
     void constrainNonSingularFaces() {
@@ -109,16 +113,24 @@ private:
     }
 
     void setupSolver(OsqpEigen::Solver& solver) {
-      // ensure(lbs.size() == m); ensure(ubs.size() == m);
       Eigen::SparseMatrix<double> C(m, knitModel.mesh().nHalfedges());
       C.setFromTriplets(triplets.begin(), triplets.end());
       lbOsqp = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
       ubOsqp = Eigen::Map<Vector<double>>(ubs.data(), ubs.size());
-      DEBUG_VAR(C.norm());
       solver.data()->setNumberOfConstraints(m);
       solver.data()->setLinearConstraintsMatrix(C);
-      solver.data()->setLowerBound(lbOsqp);
-      solver.data()->setUpperBound(ubOsqp);
+      solver.data()->setBounds(lbOsqp, ubOsqp);
+    }
+
+    void updateSolver(OsqpEigen::Solver& solver) {
+      Eigen::SparseMatrix<double> C(m, knitModel.mesh().nHalfedges());
+      C.setFromTriplets(triplets.begin(), triplets.end());
+      lbOsqp = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
+      ubOsqp = Eigen::Map<Vector<double>>(ubs.data(), ubs.size());
+      solver.data()->setNumberOfConstraints(m);
+      solver.updateLinearConstraintsMatrix(C);
+      solver.updateLowerBound(lbOsqp);
+      solver.updateUpperBound(ubOsqp);
     }
 
   };

@@ -1,5 +1,6 @@
 #include "knit_model.h"
 #include "utils.h"
+#include "homology.h"
 #include <nlohmann/json.hpp>
 #include <igl/grad_intrinsic.h>
 #include "geometrycentral/surface/remeshing.h"
@@ -383,6 +384,20 @@ polyscope::CurveNetwork* KnitModel::showSeparatrices() const {
   return showGlobalEdges("separatrices", sepEdges);
 }
 
+vector<polyscope::CurveNetwork*> KnitModel::showHomologyGenerators() const {
+
+  vector<polyscope::CurveNetwork*> views;
+  int i = 0;
+  for (auto& hg : homologyGenerators) {
+    vector<Edge> hgEdges;
+    for (Halfedge he : hg)
+      hgEdges.push_back(he.edge());
+    views.push_back(showEdges(format("homology generator {}", i++), hgEdges)->setRadius(0.0025));
+  }
+  // for (auto& view : views) view->setEnabled(false);
+  return views;
+}
+
 polyscope::CurveNetwork* KnitModel::showSurfacePointNetwork(string name, const vector<SurfacePoint>& points, const vector<pair<int,int>>& adj) const {
   
   // Not super elegant to have duplicate nodes, but this is just for viz.
@@ -431,6 +446,12 @@ polyscope::CurveNetwork* KnitModel::showSurfacePointNetwork(string name, const v
 //     }
 //   }
 // }
+
+const std::vector<std::vector<Halfedge>>& KnitModel::getHomologyGenerators() const {
+  if (homologyGenerators.empty())
+    homologyGenerators = buildHomologyGenerators(mesh());
+  return homologyGenerators;
+}
 
 void KnitModel::cutAlongIsoline(VertexData<double>& field, double value, vector<Edge>& sepEdges) {
   

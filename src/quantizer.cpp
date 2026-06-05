@@ -38,6 +38,8 @@ Quantizer::Quantizer(const KnitModelInterface& _knitModel) :
 
 vector<SurfacePoint> Quantizer::quantizeMeasure(VertexData<double>& measure, int nSites) {
 
+  if (nSites == 0) return {};
+
   double totalMass = measure.raw().dot(geom.vertexDualAreas.raw());
   double targetMass = totalMass / nSites; // per-site target mass
 
@@ -221,6 +223,7 @@ vector<SurfacePoint> Quantizer::quantizeMeasure(VertexData<double>& measure, int
 std::vector<SurfacePoint> Quantizer::quantizeMeasure(VertexData<double>& measure, double targetMass) {
   double totalMass = measure.raw().dot(geom.vertexDualAreas.raw());
   int nSites = round(totalMass / targetMass);
+  cout << format("Quantizing curl measure to {} singularities.", nSites) << endl;
   return quantizeMeasure(measure, nSites);
 }
 

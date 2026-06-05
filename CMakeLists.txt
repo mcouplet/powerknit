@@ -168,7 +168,7 @@ else()
 endif()
 
 # ── Executable ────────────────────────────────────────────────────────────────
-add_executable(powerknit 
+add_executable(powerknit
     src/main.cpp
     src/knit_model.cpp
     src/time_function.cpp
@@ -176,6 +176,7 @@ add_executable(powerknit
     src/quantizer.cpp
     src/singularity_matcher.cpp
     src/foliation.cpp
+    src/homology.cpp
 )
 
 target_link_libraries(powerknit PRIVATE

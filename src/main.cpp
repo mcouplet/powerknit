@@ -49,10 +49,13 @@ int main(int argc, char** argv) {
 
   DEBUG_VAR(*period);
   
-  // Compute time function, curl measures, and decompose into cylinders
+  // Compute time function, curl measures, and cut saddle loops
   TimeFunction timeFunction(knitModel, *period, *period);
   cout << "Stats after cutting:" << endl;
   knitModel.printStats();
+
+  knitModel.getHomologyGenerators(); // just to compute them
+  knitModel.showHomologyGenerators();
 
   // TODO: we might want to re-compute a harmonic time function on the cut mesh,
   // with constraints on the saddle loops time values.
@@ -116,22 +119,23 @@ int main(int argc, char** argv) {
     // }
   }
 
+  // // The wale part is done on the whole model
+  // // Mask wale curl
+  // Quantizer quantizer(knitModel);
+  // vector<SurfacePoint> posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *period);
+  // vector<SurfacePoint> negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
+  // knitModel.showSurfacePoints("posWaleSings", posWaleSings);
+  // DEBUG_VAR(static_cast<int>(posWaleSings[0].type));
+
+  // DEBUG_VAR(&knitModel.mesh());
+  // DEBUG_VAR(posWaleSings[0].edge.getMesh());
+
   // Stripes! The best part
   Foliation foliation(knitModel, morseDecomp);
   foliation.computeCourse(pairedCourseSingsPerCell, *period);
+  // foliation.computeWale(posWaleSings, negWaleSings, *period);
 
 
-  // This part should be done per cylinder once we have that figured out
-  // Quantizer quantizer(knitModel);
-  // vector<SurfacePoint> posCourseSings = quantizer.quantizeMeasure(timeFunction.posCourseCurl);
-  // vector<SurfacePoint> negCourseSings = quantizer.quantizeMeasure(timeFunction.negCourseCurl);
-
-  // // The wale part is done on the whole model
-  // // Mask wale curl
-  // vector<SurfacePoint> posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl);
-  // vector<SurfacePoint> negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl);
-
-  // stripe module (whole model)
   // knit graph module (whole model)
   // get rid of Gurobi
 

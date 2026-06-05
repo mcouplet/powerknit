@@ -41,9 +41,9 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
   knitModel.addVertexScalarQuantity("course curl", courseCurl, polyscope::DataType::SYMMETRIC);
   knitModel.addVertexScalarQuantity("wale curl", waleCurl, polyscope::DataType::SYMMETRIC);
 
-  // // Split them into positive and negative
-  // splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
-  // splitMeasure(courseCurl, posWaleCurl,   negWaleCurl);
+  // Split them into positive and negative
+  splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
+  splitMeasure(courseCurl, posWaleCurl,   negWaleCurl);
 
   // cutMesh();
 }

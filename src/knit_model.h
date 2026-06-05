@@ -76,6 +76,9 @@ public:
   std::vector<Edge> courseAlignedEdges;       // edges that are imposed to be aligned with a course row
   // (see globalBoundaryConditions in SewingPatterns/helpers.h for more)
 
+  // Lazy homology generator construction
+  const std::vector<std::vector<Halfedge>>& getHomologyGenerators() const;
+
   // The newly created separatrix edges (of glued mesh) will be appended to `sepEdges`
   void cutAlongIsoline(VertexData<double>& field, double value, std::vector<Edge>& sepEdges);
   
@@ -99,6 +102,7 @@ public:
 
   // Specialized visualization
   polyscope::CurveNetwork* showSeparatrices() const;
+  std::vector<polyscope::CurveNetwork*> showHomologyGenerators() const;
 
   // // Show a set of glued surface points on global mesh.
   // polyscope::PointCloud* showSurfacePoints(std::string name, const std::vector<SurfacePoint>& points) const;
@@ -139,6 +143,8 @@ private:
   void transferGlobalToGlued(const VertexData<T>& globalData, VertexData<T>& gluedData) const; // assumes that the input global data is consistent!
 
   void glueMesh();
+
+  mutable std::vector<std::vector<Halfedge>> homologyGenerators; // mutable means it can be modified even if knitModel is const
 
   // template <std::ranges::range Container> requires std::
   polyscope::PointCloud* showGlobalVertices(std::string name, const std::ranges::range auto& vertices) const {
