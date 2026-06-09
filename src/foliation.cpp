@@ -35,7 +35,7 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
       double t1 = cell.timeFunction(s1), t2 = cell.timeFunction(s2);
       ensure(abs(t1-t2) < 1e-9); // sanity check
       Edge e1 = s1.edge, e2 = s2.edge;
-      if (singOrder[e1] != 0 || singOrder[e2] != 0) {
+      if (singOrder[e1] != 0 || singOrder[e2] != 0 || e1 == e2) { // also check that they're not on the same edge
         nDroppedPairs++;
         // droppedPairs.push_back({cell.model().transferToParent(s1), cell.model().transferToParent(s2)});
         droppedPairs.push_back({s1, s2});
@@ -484,7 +484,7 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
       if (!isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6))
         problematicFaces[f] = 1;
       DEBUG_VAR(stripeVal(points[fPoints[2*i]]) - stripeVal(points[fPoints[2*i+1]]));
-      // ensure(isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6)); // sanity check that stripe values are matching
+      ensure(isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6)); // sanity check that stripe values are matching
       adj.push_back({fPoints[2*i], fPoints[2*i+1]});
     }
   }
