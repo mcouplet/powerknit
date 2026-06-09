@@ -72,6 +72,9 @@ int main(int argc, char** argv) {
 
   for (auto& cell : morseDecomp.cells) {
 
+    // cell.timeFunction.posCourseCurl /= 2;
+    // cell.timeFunction.negCourseCurl /= 2;
+
     // Plot curl measures
     cell.model().addMeasure("pos course curl", cell.timeFunction.posCourseCurl)->setColorMap("reds");
     cell.model().addMeasure("neg course curl", cell.timeFunction.negCourseCurl)->setColorMap("blues");

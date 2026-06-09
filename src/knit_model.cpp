@@ -450,6 +450,7 @@ polyscope::CurveNetwork* KnitModel::showSurfacePointNetwork(string name, const v
 const std::vector<std::vector<Halfedge>>& KnitModel::getHomologyGenerators() const {
   if (homologyGenerators.empty())
     homologyGenerators = buildHomologyGenerators(mesh());
+  
   return homologyGenerators;
 }
 

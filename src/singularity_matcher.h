@@ -8,7 +8,9 @@
 class SingularityMatcher {
 
 public:  
-  SingularityMatcher(const TimeFunction& _timeFunction) : knitModel(_timeFunction.knitModel), timeFunction(_timeFunction), heatSolver(knitModel.geom()) {}
+  SingularityMatcher(const TimeFunction& _timeFunction) : knitModel(_timeFunction.knitModel), timeFunction(_timeFunction), heatSolver(knitModel.geom()) {
+    knitModel.geom().requireHalfedgeVectorsInFace(); // for vertical alignemnt stuff
+  }
 
   // Output SurfacePoint's are guaranteed located on edges
   std::vector<std::pair<SurfacePoint,SurfacePoint>> match(const std::vector<SurfacePoint>& posSings, const std::vector<SurfacePoint>& negSings);
@@ -20,5 +22,5 @@ private:
   HeatMethodDistanceSolver heatSolver; // to compute geodesic distances, for projection on isolines
 
   std::vector<SurfacePoint> sortByTime(const std::vector<SurfacePoint>& sings);
-  void projectOnIsoline(SurfacePoint& point, double target);
+  void projectOnIsoline(SurfacePoint& point, double target, double alignThreshold=0); // alignThreshold is the min cosine between tf grad and edge. Default is no alignment constraint.
 };

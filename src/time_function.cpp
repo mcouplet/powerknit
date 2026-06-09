@@ -43,7 +43,7 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
 
   // Split them into positive and negative
   splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
-  splitMeasure(courseCurl, posWaleCurl,   negWaleCurl);
+  splitMeasure(waleCurl,   posWaleCurl,   negWaleCurl);
 
   // cutMesh();
 }
@@ -61,7 +61,8 @@ TimeFunction::TimeFunction(KnitSubModel& _knitModel, const TimeFunction& parent)
 
   splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
   splitMeasure(waleCurl, posWaleCurl, negWaleCurl);
-  // Do we need to transfer other stuff?
+  // Do we need to transfer other stuff? Yes: time function grad. Safer to just recompute it on the sub-model
+  computeTimeFunctionGrad();
 }
 
 void TimeFunction::computeTimeFunction(KnitModel& fullKnitModel) {
@@ -223,7 +224,7 @@ void TimeFunction::computeCurl(const FaceData<Vector2>& field, VertexData<double
   for (Halfedge he : mesh.interiorHalfedges()) {
     Vertex v = he.next().tipVertex();
     if (!v.isBoundary()) // aren't we ignoring curl by doing this?
-      curl[v] += (1./geom.vertexDualAreas[v]) * dot(field[he.face()], geom.halfedgeVectorsInFace[he]);
+      curl[v] += (1./(2*geom.vertexDualAreas[v])) * dot(field[he.face()], geom.halfedgeVectorsInFace[he]);
   }
 }
 
@@ -284,5 +285,4 @@ void TimeFunction::cutSaddleLoops(KnitModel& fullKnitModel) {
     isSeparatrix[e] = true;
   
   fullKnitModel.showSeparatrices()->setRadius(1e-3);
-
 }

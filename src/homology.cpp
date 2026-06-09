@@ -118,8 +118,10 @@ namespace {
     }
     return edges;
   }
+} // end anonymous namespace
 
-  std::vector<std::vector<double>> buildHomologyGeneratorsVector(VertexPositionGeometry &geometry, ManifoldSurfaceMesh& mesh) {
+
+  std::vector<std::vector<double>> buildHomologyGeneratorsVector(ManifoldSurfaceMesh& mesh) {
 
     const auto cotree = buildDualSpanningTree(mesh);
     const auto tree = buildPrimalSpanningTree(mesh, cotree);
@@ -218,10 +220,9 @@ namespace {
       homologyGenerators.push_back(homologyRing);
       homologyGeneratorsHalfedges.push_back(homologyRingHalfedges);
     }
-    visualizeHomologyGenerators(homologyGeneratorsHalfedges, geometry);
+    // visualizeHomologyGenerators(homologyGeneratorsHalfedges, geometry);
     return homologyGenerators;
   }
-} // end anonymous namespace
 
 // The main function that is exposed
 std::vector<std::vector<Halfedge>> buildHomologyGenerators(ManifoldSurfaceMesh &mesh) {
@@ -257,7 +258,9 @@ std::vector<std::vector<Halfedge>> buildHomologyGenerators(ManifoldSurfaceMesh &
     do {
       const Vertex parentVertex = tree.at(currentVertex);
       const Halfedge sharedHe = sharedHalfedge(currentVertex, parentVertex);
-      pathToRoot2.push_back(sharedHe);
+      // sharedHalfedge points child->parent (toward the root), but the cycle
+      // traverses this branch root->tail (parent->child), so flip it.
+      pathToRoot2.push_back(sharedHe.twin());
       currentVertex = parentVertex;
     }
     while (tree.at(currentVertex) != currentVertex);

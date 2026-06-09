@@ -10,6 +10,8 @@ using namespace geometrycentral::surface;
 
 std::vector<std::vector<Halfedge>> buildHomologyGenerators(ManifoldSurfaceMesh &mesh);
 
+std::vector<std::vector<double>> buildHomologyGeneratorsVector(ManifoldSurfaceMesh &mesh);
+
   // bool inPrimalSpanningTree(const Halfedge &he, const std::unordered_map<Vertex, Vertex> &tree);
   // bool inDualSpanningTree(const Halfedge &he, const std::unordered_map<Face, Face> &cotree);
 

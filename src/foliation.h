@@ -36,18 +36,52 @@ private:
 
   std::tuple<std::vector<SurfacePoint>, std::vector<std::pair<int,int>>> traceStripes(CornerData<double>& stripeValues, double period);
 
-  class Constraints {
+  class Solver {
 
   private:
     const KnitModel& knitModel;
-    std::vector<Eigen::Triplet<double>> triplets; // matrix entries
+    OsqpEigen::Solver solver;
+    static constexpr auto inf = OsqpEigen::INFTY;
+    // Objective
+    int n; // number of variables
+    Eigen::VectorXd grad;
+    SparseMatrix<double> hess;
+    // Constraints
+    int m = 0; // current number of constraints
+    std::vector<Eigen::Triplet<double>> triplets; // constraint matrix entries
     std::vector<double> lbs, ubs; // lower and upper bounds
     Vector<double> lbOsqp, ubOsqp; // we need these to outlive setupSolver
-    int m = 0; // current number of constraints
-    static constexpr auto inf = OsqpEigen::INFTY;
 
   public:
-    Constraints (const KnitModel& knitModel) : knitModel(knitModel) {}
+    Solver (const KnitModel& knitModel) : knitModel(knitModel) {
+      n = knitModel.mesh().nHalfedges();
+    }
+
+    // Set up the objective function (1/2 x'Px + q'x + c) using TinyAD.
+    void setObjective(FaceData<Vector2> guidingField) {
+      auto& mesh = knitModel.mesh();
+      auto obj = TinyAD::scalar_function<1>(mesh.halfedges());
+      obj.add_elements<3>(mesh.faces(), [&](auto& element) {
+        using T = TINYAD_SCALAR_TYPE(element);
+        Face face = element.handle;
+
+        // Build linear field on triangle from one-form values
+        Eigen::Vector<T,3> u; u(0) = 0;
+        int i = 0;
+        for (Halfedge he : face.adjacentHalfedges()) {
+          u(i+1) = u(i) + element.variables(he)(0,0);
+          i++; if (i == 2) break;
+        }
+
+        // Compute grad and add squared diff to objective function
+        Eigen::Vector<T,2> gu = knitModel.computeIntrinsicGrad(face, u);
+        Eigen::Vector2d gu_target { guidingField[face].x, guidingField[face].y};
+        // gu_target /= period; // TODO: double check this. NO: guiding fields are already scaled
+        return knitModel.geom().faceAreas[face] * (gu - gu_target).squaredNorm();
+      });
+      double c;
+      std::tie(c, grad, hess) = obj.eval_with_derivatives(Eigen::VectorXd::Zero(mesh.nHalfedges()));
+    }
 
     void constrainHalfedgePath(const HalfedgeData<double>& weights, double lb, double ub) {
       for (Halfedge he : knitModel.mesh().halfedges()) 
@@ -112,7 +146,31 @@ private:
       m++;
     }
 
-    void setupSolver(OsqpEigen::Solver& solver) {
+    void constrainHalfedgeOrientation(const EdgeData<int>& singIndex, const TimeFunction& tf) {
+      for (Halfedge he : knitModel.mesh().interiorHalfedges()) {
+        if (singIndex[he.edge()] == 0) { // regular edge
+          auto [t1, t2] = tf(he);
+          if (t2 > t1)  triplets.emplace_back(m, he.getIndex(), 1);
+          else          triplets.emplace_back(m, he.getIndex(), -1);
+          lbs.push_back(0); ubs.push_back(inf);
+          m++;
+        }
+      }
+    }
+
+    void setup() {
+
+      solver.clearSolver();
+      solver.data()->clearHessianMatrix();
+      solver.data()->clearLinearConstraintsMatrix();
+      
+
+      // Objective
+      solver.data()->setNumberOfVariables(knitModel.mesh().nHalfedges());
+      solver.data()->setHessianMatrix(hess);
+      solver.data()->setGradient(grad);
+
+      // Constraints
       Eigen::SparseMatrix<double> C(m, knitModel.mesh().nHalfedges());
       C.setFromTriplets(triplets.begin(), triplets.end());
       lbOsqp = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
@@ -120,18 +178,35 @@ private:
       solver.data()->setNumberOfConstraints(m);
       solver.data()->setLinearConstraintsMatrix(C);
       solver.data()->setBounds(lbOsqp, ubOsqp);
+
+      // Parameters
+      solver.settings()->setPolish(true); // for more accurate results
+      solver.settings()->setAbsoluteTolerance(1e-9);
+      solver.settings()->setRelativeTolerance(1e-9);
+      solver.settings()->setPrimalInfeasibilityTolerance(1e-9);
+      solver.settings()->setDualInfeasibilityTolerance(1e-9);
+
     }
 
-    void updateSolver(OsqpEigen::Solver& solver) {
-      Eigen::SparseMatrix<double> C(m, knitModel.mesh().nHalfedges());
-      C.setFromTriplets(triplets.begin(), triplets.end());
-      lbOsqp = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
-      ubOsqp = Eigen::Map<Vector<double>>(ubs.data(), ubs.size());
-      solver.data()->setNumberOfConstraints(m);
-      solver.updateLinearConstraintsMatrix(C);
-      solver.updateLowerBound(lbOsqp);
-      solver.updateUpperBound(ubOsqp);
+    HalfedgeData<double> solve() {
+      solver.initSolver();
+      solver.solveProblem();
+      return HalfedgeData<double> (knitModel.mesh(), solver.getSolution());
     }
+
+    // void updateSolver(OsqpEigen::Solver& solver) {
+    //   Eigen::SparseMatrix<double> C(m, knitModel.mesh().nHalfedges());
+    //   C.setFromTriplets(triplets.begin(), triplets.end());
+    //   lbOsqp = Eigen::Map<Vector<double>>(lbs.data(), lbs.size());
+    //   ubOsqp = Eigen::Map<Vector<double>>(ubs.data(), ubs.size());
+
+    //   solver.data()->setNumberOfConstraints(m);
+    //   solver.updateLinearConstraintsMatrix(C);
+    //   // Update both bounds at once: updating them separately validates the new
+    //   // lower bound against the *stale* upper bound (and vice versa), which can
+    //   // spuriously trip OSQP's l <= u check during the transient.
+    //   solver.updateBounds(lbOsqp, ubOsqp);
+    // }
 
   };
 };
