@@ -29,6 +29,7 @@ private:
 
   std::vector<Face> traceIsolineTriangleStrip(Halfedge startHe, Halfedge endHe, double tval, const MorseDecomposition::Cell& cell); // input half-edges and output faces are on sub-mesh
   void halfedgePathFromStrip(const std::vector<Face>& strip, const EdgeData<int>& singIndex, int iPair, double tval, const MorseDecomposition::Cell& cell, HalfedgeData<double>& pathWeights); // all quantities are on the same mesh
+  HalfedgeData<double> getOrderingPath(int iPair, const std::vector<std::tuple<Halfedge,Halfedge,double>>& singHalfedges, const EdgeData<int>& singIndex, const MorseDecomposition::Cell& cell);
 
   // Assumes singularities are on edges and not on faces! I.e., sigma integrates to 0 inside faces.
   // For the version that handles singular faces, look at computeStripeValuesFromOneForm() from the old codebase.
@@ -41,7 +42,6 @@ private:
   private:
     const KnitModel& knitModel;
     OsqpEigen::Solver solver;
-    static constexpr auto inf = OsqpEigen::INFTY;
     // Objective
     int n; // number of variables
     Eigen::VectorXd grad;
@@ -53,6 +53,8 @@ private:
     Vector<double> lbOsqp, ubOsqp; // we need these to outlive setupSolver
 
   public:
+    static constexpr auto inf = OsqpEigen::INFTY;
+
     Solver (const KnitModel& knitModel) : knitModel(knitModel) {
       n = knitModel.mesh().nHalfedges();
     }
@@ -185,6 +187,7 @@ private:
       solver.settings()->setRelativeTolerance(1e-9);
       solver.settings()->setPrimalInfeasibilityTolerance(1e-9);
       solver.settings()->setDualInfeasibilityTolerance(1e-9);
+      solver.settings()->setMaxIteration(10000);
 
     }
 

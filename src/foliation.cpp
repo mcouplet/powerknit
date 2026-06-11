@@ -93,6 +93,8 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   for (auto& cell : morseDecomp.cells) {
     auto& singHalfedges = singHalfedgesPerCell[cell.getIndex()];
     auto& singOrder = singOrderPerCell[cell.getIndex()];
+    
+    
     for (int iPair = 0; iPair < singHalfedges.size(); iPair++) {
       auto& [he1, he2, tval] = singHalfedges[iPair];
       Halfedge phe1 = cell.model().transferToParent(he1), phe2 = cell.model().transferToParent(he2);
@@ -109,9 +111,13 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
 
       // Add constraint to model
       solver.constrainHalfedgePath(cell.model().transferToParent(pathWeights), 0, 0);
+    }
 
-      // Ordering constaints
-      // TODO
+    // Ordering constraints
+    for (int iPair = 0; iPair+1 < singHalfedges.size(); iPair++) {
+      auto pathWeights = getOrderingPath(iPair, singHalfedges, singOrder, cell);
+      knitModel.addHalfedgeScalarQuantity("ordering path " + to_string(iPair), cell.model().transferToParent(pathWeights))->setEnabled(false);
+      solver.constrainHalfedgePath(cell.model().transferToParent(pathWeights), 0, solver.inf);
     }
   }
 
@@ -303,7 +309,6 @@ void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<Surf
 }
 
 // Input halfedges and output faces are on sub-mesh.
-// Unfortunately we can't trace triangle strips on sub-meshes because we trimmed faces around saddle loops.
 vector<Face> Foliation::traceIsolineTriangleStrip(Halfedge startHe, Halfedge endHe, double tval, const MorseDecomposition::Cell& cell) {
   const TimeFunction& tf = cell.timeFunction;
   Face face = startHe.twin().face(), endFace = endHe.face(), prevFace = face;
@@ -344,6 +349,41 @@ void Foliation::halfedgePathFromStrip(const vector<Face>& strip, const EdgeData<
       }
     }
   }
+}
+
+HalfedgeData<double> Foliation::getOrderingPath(int iPair, const vector<tuple<Halfedge,Halfedge,double>>& singHalfedges, const EdgeData<int>& singIndex, const MorseDecomposition::Cell& cell) {
+  
+  auto& [heStart, _he1, _tval] = singHalfedges[iPair];
+  auto& [_he2, heEnd, targetTimeValue] = singHalfedges[iPair+1];
+
+  vector<Halfedge> heSequence {heStart}; // we always include the bottom singular half-edge, altough we don't want it in the end
+  Halfedge he = heStart;
+  while (cell.timeFunction(he.tipVertex()) < targetTimeValue) {
+    double maxTimeValue = -1;
+    Halfedge bestNextHe;
+    for (Halfedge nextHe : he.tipVertex().outgoingHalfedges()) {
+      if (cell.timeFunction(nextHe.tipVertex()) > maxTimeValue) {
+          maxTimeValue = cell.timeFunction(nextHe.tipVertex());
+          bestNextHe = nextHe;
+      }
+    }
+    he = bestNextHe;
+    heSequence.push_back(he);
+  }
+
+  vector<Face> triangleStrip = traceIsolineTriangleStrip(heSequence.back(), heEnd, targetTimeValue, cell);
+  HalfedgeData<double> pathWeights(cell.model().mesh(), 0.0);
+  halfedgePathFromStrip(triangleStrip, singIndex, iPair+1, targetTimeValue, cell, pathWeights);
+
+  // Add vertical sequence to pathWeights. Skip first which is the bottom pos edge
+  for (int i = 1; i < heSequence.size(); i++)
+    pathWeights[heSequence[i]] = +1;
+
+  // Finally, add half of the "back-window" of both sings: b/2 = (a-P)/2
+  pathWeights[heStart] += 0.5;
+  pathWeights[heEnd] += 0.5;
+
+  return pathWeights;
 }
 
 CornerData<double> Foliation::computeStripeValuesFromOneForm(HalfedgeData<double>& sigma) {
@@ -481,9 +521,11 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
       return stripeVal(points[i]) < stripeVal(points[j]);
     });
     for (int i = 0; i < fPoints.size()/2; i++) {
-      if (!isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6))
+      if (!isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6)) {
         problematicFaces[f] = 1;
-      DEBUG_VAR(stripeVal(points[fPoints[2*i]]) - stripeVal(points[fPoints[2*i+1]]));
+        DEBUG_VAR(stripeVal(points[fPoints[2*i]]) - stripeVal(points[fPoints[2*i+1]]));
+      }
+
       ensure(isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6)); // sanity check that stripe values are matching
       adj.push_back({fPoints[2*i], fPoints[2*i+1]});
     }
