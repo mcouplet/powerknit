@@ -83,8 +83,6 @@ int main(int argc, char** argv) {
 
     // Quantize to singularities
     Quantizer quantizer(cell.model());
-    DEBUG_VAR(quantizer.totalMass(cell.timeFunction.posCourseCurl));
-    DEBUG_VAR(quantizer.totalMass(cell.timeFunction.negCourseCurl));
     double avgTotalMass = (quantizer.totalMass(cell.timeFunction.posCourseCurl) + quantizer.totalMass(cell.timeFunction.negCourseCurl)) / 2;
     int nSings = avgTotalMass / *period;
     cout << format("Quantizing positive course curl measure to {} singularities.", nSings) << endl;
@@ -122,21 +120,21 @@ int main(int argc, char** argv) {
     // }
   }
 
-  // // The wale part is done on the whole model
-  // // Mask wale curl
-  // Quantizer quantizer(knitModel);
-  // vector<SurfacePoint> posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *period);
-  // vector<SurfacePoint> negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
-  // knitModel.showSurfacePoints("posWaleSings", posWaleSings);
-  // DEBUG_VAR(static_cast<int>(posWaleSings[0].type));
+  // The wale part is done on the whole model
+  // Mask wale curl
+  Quantizer quantizer(knitModel);
+  vector<SurfacePoint> posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *period);
+  vector<SurfacePoint> negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
+  knitModel.showSurfacePoints("posWaleSings", posWaleSings);
+  DEBUG_VAR(static_cast<int>(posWaleSings[0].type));
 
-  // DEBUG_VAR(&knitModel.mesh());
-  // DEBUG_VAR(posWaleSings[0].edge.getMesh());
+  DEBUG_VAR(&knitModel.mesh());
+  DEBUG_VAR(posWaleSings[0].edge.getMesh());
 
   // Stripes! The best part
   Foliation foliation(knitModel, morseDecomp);
   foliation.computeCourse(pairedCourseSingsPerCell, *period);
-  // foliation.computeWale(posWaleSings, negWaleSings, *period);
+  foliation.computeWale(posWaleSings, negWaleSings, *period);
 
 
   // knit graph module (whole model)

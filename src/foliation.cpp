@@ -72,7 +72,7 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   EdgeData<double> singIndexViz(mesh, 0);
   for (Edge e : mesh.edges())
     singIndexViz[e] = singIndex[e];
-  knitModel.addEdgeScalarQuantity("singIndex", singIndexViz);
+  knitModel.addEdgeScalarQuantity("course singIndex", singIndexViz);
 
   // OSQP (Operator Splitting Quadratic Program) solver.
   Solver solver(knitModel); // our wrapper
@@ -207,103 +207,132 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
 
 void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings, double period) {
 
-  // ManifoldSurfaceMesh& mesh = knitModel.mesh();
-  // EdgeLengthGeometry& geom = knitModel.geom();
-  // geom.requireFaceAreas(); // for objective function
+  ManifoldSurfaceMesh& mesh = knitModel.mesh();
+  EdgeLengthGeometry& geom = knitModel.geom();
+  geom.requireFaceAreas(); // for objective function
 
-  // // Put singularities on edges
-  // auto projectToNearestEdge = [&] (const SurfacePoint& p) {
-  //   int imin = 0; // smallest barycentric coord
-  //   for (int i = 1; i < 3; i++)
-  //     if (p.faceCoords[i] < p.faceCoords[imin])
-  //       imin = i;
-  //   Halfedge he = p.face.halfedge().next();
-  //   for (int j = 0; j < imin; j++) he = he.next();
-  //   double t1 = p.faceCoords[(imin+1)%3], t2 = p.faceCoords[(imin+2)%3];
-  //   double tHe = (t2) / (t1+t2);
-  //   return SurfacePoint(he, tHe);
-  // };
+  // Put singularities on edges
+  auto projectToNearestEdge = [&] (const SurfacePoint& p) {
+    int imin = 0; // smallest barycentric coord
+    for (int i = 1; i < 3; i++)
+      if (p.faceCoords[i] < p.faceCoords[imin])
+        imin = i;
+    Halfedge he = p.face.halfedge().next();
+    for (int j = 0; j < imin; j++) he = he.next();
+    double t1 = p.faceCoords[(imin+1)%3], t2 = p.faceCoords[(imin+2)%3];
+    double tHe = (t2) / (t1+t2);
+    return SurfacePoint(he, tHe);
+  };
   
-  // vector<SurfacePoint> posSingsOnEdges, negSingsOnEdges;
-  // for (auto& p : posSings) posSingsOnEdges.push_back(projectToNearestEdge(p));
-  // for (auto& p : negSings) negSingsOnEdges.push_back(projectToNearestEdge(p));
-  // knitModel.showSurfacePoints("posWaleSingsOnEdges", posSingsOnEdges);
-  // knitModel.showSurfacePoints("negWaleSingsOnEdges", negSingsOnEdges);
+  vector<SurfacePoint> posSingsOnEdges, negSingsOnEdges;
+  for (auto& p : posSings) posSingsOnEdges.push_back(projectToNearestEdge(p));
+  for (auto& p : negSings) negSingsOnEdges.push_back(projectToNearestEdge(p));
+  knitModel.showSurfacePoints("posWaleSingsOnEdges", posSingsOnEdges);
+  knitModel.showSurfacePoints("negWaleSingsOnEdges", negSingsOnEdges);
 
-  // // Get edge indices
-  // EdgeData<int> singIndex(mesh, 0);
-  // for (auto& p : posSingsOnEdges) singIndex[p.edge] = +1;
-  // for (auto& p : negSingsOnEdges) singIndex[p.edge] = -1;
-  // // knitModel.addEdgeScalarQuantity("waleSingIndex", singIndex);
-  // // polyscope::show();
-
-  // // OSQP (Operator Splitting Quadratic Program) solver.
-  // OsqpEigen::Solver solver;
-
-  // // OBJECTIVE FUNCTION
-  // // Set up the objective function (1/2 x'Px + q'x + c) using TinyAD.
-  // auto obj = TinyAD::scalar_function<1>(mesh.halfedges());
-  // obj.add_elements<3>(mesh.faces(), [&](auto& element) {
-  //   using T = TINYAD_SCALAR_TYPE(element);
-  //   Face face = element.handle;
-
-  //   // Build linear field on triangle from one-form values
-  //   Eigen::Vector<T,3> u; u(0) = 0;
-  //   int i = 0;
-  //   for (Halfedge he : face.adjacentHalfedges()) {
-  //     u(i+1) = u(i) + element.variables(he)(0,0);
-  //     i++; if (i == 2) break;
-  //   }
-
-  //   // Compute grad and add squared diff to objective function
-  //   Eigen::Vector<T,2> gu = knitModel.computeIntrinsicGrad(face, u);
-  //   Eigen::Vector2d gu_target { timeFunction.waleGuide[face].x, timeFunction.waleGuide[face].y};
-  //   // gu_target /= period; // TODO: double check this. NO: guiding fields are already scaled
-  //   return geom.faceAreas[face] * (gu - gu_target).squaredNorm();
-  // });
-  // auto [c, grad, hess] = obj.eval_with_derivatives(Eigen::VectorXd::Zero(mesh.nHalfedges()));
-  // solver.data()->setNumberOfVariables(mesh.nHalfedges());
-  // solver.data()->setHessianMatrix(hess);
-  // solver.data()->setGradient(grad);
-
-  // Constraints constraints(knitModel);
-  // constraints.constrainNonSingularFaces();
-  // constraints.constrainEdgeIndices(singIndex, period);
-  // constraints.setupSolver(solver);
-  
-  // // Final solver setup and solve
-  // solver.settings()->setPolish(true); // for more accurate results
-  // solver.settings()->setAbsoluteTolerance(1e-8);
-  // solver.settings()->setRelativeTolerance(1e-8);
-  // solver.settings()->setPrimalInfeasibilityTolerance(1e-8);
-  // solver.settings()->setDualInfeasibilityTolerance(1e-8);
-  // solver.initSolver();
-  // solver.solveProblem();
-
-  // HalfedgeData<double> sigma(mesh, solver.getSolution());
-  // knitModel.addHalfedgeScalarQuantity("wale sigma", sigma, polyscope::DataType::SYMMETRIC);
-
-  // // Viz d1(sigma)
-  // FaceData<double> d1sigma(mesh, 0.0);
-  // for (Face f : mesh.faces())
-  //   for (Halfedge he : f.adjacentHalfedges())
-  //     d1sigma[f] += sigma[he];
-  // knitModel.addFaceScalarQuantity("wale d1sigma", d1sigma, polyscope::DataType::SYMMETRIC);
-
-  // // Viz d1^B(sigma)
-  // EdgeData<double> d1Bsigma(mesh, 0.0);
-  // for (Edge e : mesh.edges())
-  //   for (Halfedge he : e.adjacentHalfedges())
-  //     d1Bsigma[e] += sigma[he];
-  // knitModel.addEdgeScalarQuantity("wale d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
-
+  // Get edge indices
+  EdgeData<int> singIndex(mesh, 0);
+  for (auto& p : posSingsOnEdges) singIndex[p.edge] = +1;
+  for (auto& p : negSingsOnEdges) singIndex[p.edge] = -1;
+  // knitModel.addEdgeScalarQuantity("waleSingIndex", singIndex);
   // polyscope::show();
+  int sumWaleIndex = 0;
+  for (Edge e : mesh.edges()) sumWaleIndex += singIndex[e];
 
-  // CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma);
-  // knitModel.addCornerScalarQuantity("wale stripe values", stripeValues);
+  EdgeData<double> singIndexViz(mesh, 0);
+  for (Edge e : mesh.edges())
+    singIndexViz[e] = singIndex[e];
+  knitModel.addEdgeScalarQuantity("wale singIndex", singIndexViz);
 
-  // auto [points, adj] = traceStripes(stripeValues, period);
-  // knitModel.showSurfacePointNetwork("wale stripes", points, adj)->setRadius(1e-3);
+  // OSQP (Operator Splitting Quadratic Program) solver.
+  Solver solver(knitModel);
+  solver.setObjective(timeFunction.waleGuide);
+
+  // Add constraint that all faces should be non-singular
+  solver.constrainNonSingularFaces();
+
+  // Constrain edge indices. The -1's come from the fact that we're computing d1 *inside the bigon*.
+  solver.constrainEdgeIndices(singIndex, period);
+
+  solver.setup();
+  HalfedgeData<double> sigma = solver.solve();
+
+  // Compute integral over boundaries
+  double bdyInteg = 0;
+  for (Halfedge he : mesh.exteriorHalfedges())
+    bdyInteg += sigma[he];
+  DEBUG_VAR(bdyInteg);
+  DEBUG_VAR(sumWaleIndex * period);
+
+  // Look for the n-1 generators that are closest to integer: we'll snap them
+  vector<pair<int, double>> hgWithInteg; // (hg, integ) pairs
+  const auto& hgs = knitModel.getHomologyGenerators();
+  int nhg = hgs.size();
+  double sumInteg = 0;
+  for (int i = 0; i < nhg; i++) {
+    double integ = 0;
+    for (Halfedge he : hgs[i])
+      integ += sigma[he];
+    hgWithInteg.push_back({i, integ});
+    sumInteg += integ;
+    DEBUG_VAR(integ);
+
+    // plot hg
+    HalfedgeData<double> hgViz(mesh, 0);
+    for (Halfedge he : hgs[i])
+      hgViz[he] = 1;
+    knitModel.addHalfedgeScalarQuantity("hg"+to_string(i), hgViz);
+  }
+
+  auto roundPeriod = [period](double x) { return period * round(x/period); };
+
+  DEBUG_VAR(sumInteg);
+  auto remainder = [roundPeriod](double x) { return abs(x-roundPeriod(x)); };
+  std::sort(hgWithInteg.begin(), hgWithInteg.end(), [&](const auto& a, const auto& b) {
+    return remainder(a.second) < remainder(b.second);
+  });
+  for (int i = 0; i < nhg; i++) {
+    auto [ihg, integ] = hgWithInteg[i];
+    double roundedInteg = roundPeriod(integ);
+    solver.constrainHalfedgePath(hgs[ihg], roundedInteg, roundedInteg);
+  }
+
+  // Update constraints and solve again
+  solver.setup();
+  sigma = solver.solve();
+
+  for (int i = 0; i < nhg; i++) {
+    double integ = 0;
+    for (Halfedge he : hgs[i])
+      integ += sigma[he];
+    DEBUG_VAR(integ);
+  }
+
+  knitModel.addHalfedgeScalarQuantity("wale sigma", sigma, polyscope::DataType::SYMMETRIC);
+
+
+  
+  // Viz d1(sigma)
+  FaceData<double> d1sigma(mesh, 0.0);
+  for (Face f : mesh.faces())
+    for (Halfedge he : f.adjacentHalfedges())
+      d1sigma[f] += sigma[he];
+  knitModel.addFaceScalarQuantity("wale d1sigma", d1sigma, polyscope::DataType::SYMMETRIC);
+
+  // Viz d1^B(sigma)
+  EdgeData<double> d1Bsigma(mesh, 0.0);
+  for (Edge e : mesh.edges())
+    for (Halfedge he : e.adjacentHalfedges())
+      d1Bsigma[e] += sigma[he];
+  knitModel.addEdgeScalarQuantity("wale d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
+
+  polyscope::show();
+
+  CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma);
+  knitModel.addCornerScalarQuantity("wale stripe values", stripeValues);
+
+  auto [points, adj] = traceStripes(stripeValues, period);
+  knitModel.showSurfacePointNetwork("wale stripes", points, adj)->setRadius(1e-3);
 
 
 }
@@ -448,7 +477,7 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
 
   // Compute index of each bigon
   EdgeData<int> edgeIndex(mesh, 0);
-  for (Edge e : mesh.edges()) {
+  for (Edge e : mesh.edges()) if (!e.isBoundary()) {
     Halfedge he1 = e.halfedge();
     Halfedge he2 = he1.twin();
     double form1 = stripeValues[he1.next().corner()] - stripeValues[he1.corner()];
@@ -456,6 +485,13 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
     double d1 = form1 + form2;
     edgeIndex[e] = round(d1 / period);
   }
+
+  EdgeData<double> singIndexViz(mesh, 0);
+  for (Edge e : mesh.edges())
+    singIndexViz[e] = edgeIndex[e];
+  knitModel.addEdgeScalarQuantity("traceStripes singIndex", singIndexViz);
+
+  // polyscope::show();
 
   FaceData<vector<int>> faceToPoints(mesh);
   for (Edge e : mesh.edges()) {
