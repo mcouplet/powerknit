@@ -20,6 +20,11 @@ bool between(T x, T a, T b) { return ((x - a) * (x - b)) <= 0; }
 template <typename T>
 bool between(T x, std::pair<T,T> p) { return between(x, p.first, p.second); }
 
+// Mathematical modulo for double's
+inline double mod(double a, double b) {
+    return std::fmod(std::fmod(a, b) + b, b);
+}
+
 // To print pairs easily
 template<class T1, class T2> std::ostream &operator<<(std::ostream &os, std::pair<T1, T2> v) {
   os << "(" << v.first << ", " << v.second << ")";

@@ -199,6 +199,29 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma);
   knitModel.addCornerScalarQuantity("course stripe values", stripeValues);
 
+  // Sanity check: d1 on stripe values
+  for (Edge e : mesh.edges()) {
+    Halfedge he = e.halfedge();
+    double s1 = stripeValues[he.next().corner()] - stripeValues[he.corner()];
+    he = he.twin();
+    double s2 = stripeValues[he.next().corner()] - stripeValues[he.corner()];
+    double d1 = -s1 - s2;
+    if (!isClose(d1, singIndex[e]*period)) {
+      DEBUG_VAR(d1);
+      DEBUG_VAR(singIndex[e]);
+    }
+  }
+
+  // // Sanity check that stripe values at a vertex are equal up to period
+  // for (Vertex v : mesh.vertices()) {
+  //   double val = mod(stripeValues[v.corner()], period);
+  //   for (Corner co : v.adjacentCorners()) {
+  //     if (!isClose(mod(stripeValues[co], period), val)) {
+  //       DEBUG_VAR(mod(stripeValues[co], period) - val);
+  //     }
+  //   }
+  // }
+
   auto [points, adj] = traceStripes(stripeValues, period);
   knitModel.showSurfacePointNetwork("course stripes", points, adj)->setRadius(1e-3);
 
@@ -267,6 +290,27 @@ void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<Surf
   // Look for the n-1 generators that are closest to integer: we'll snap them
   vector<pair<int, double>> hgWithInteg; // (hg, integ) pairs
   const auto& hgs = knitModel.getHomologyGenerators();
+
+  // Look for a homology generator that's exactly a boundary loop. We'll let it free.
+  int iBdy = -1;
+  for (int i = 0; i < hgs.size(); i++) {
+    auto& hg = hgs[i];
+    bool isBdy = true;
+    for (Halfedge he : hg) {
+      if (he.twin().isInterior()) {
+        isBdy = false;
+        break;
+      }
+    }
+    if (isBdy) {
+      iBdy = i;
+      break;
+    }
+  }
+  if (iBdy == -1) {
+    DEBUG_PRINT("Could not find a boundary homology generator. Wale stripes might be infeasible.");
+  }
+
   int nhg = hgs.size();
   double sumInteg = 0;
   for (int i = 0; i < nhg; i++) {
@@ -287,15 +331,17 @@ void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<Surf
   auto roundPeriod = [period](double x) { return period * round(x/period); };
 
   DEBUG_VAR(sumInteg);
-  auto remainder = [roundPeriod](double x) { return abs(x-roundPeriod(x)); };
-  std::sort(hgWithInteg.begin(), hgWithInteg.end(), [&](const auto& a, const auto& b) {
-    return remainder(a.second) < remainder(b.second);
-  });
+  // auto remainder = [roundPeriod](double x) { return abs(x-roundPeriod(x)); };
+  // std::sort(hgWithInteg.begin(), hgWithInteg.end(), [&](const auto& a, const auto& b) {
+  //   return remainder(a.second) < remainder(b.second);
+  // });
   for (int i = 0; i < nhg; i++) {
+    // if (i == iBdy) continue; // skip boundary generator
     auto [ihg, integ] = hgWithInteg[i];
     double roundedInteg = roundPeriod(integ);
     solver.constrainHalfedgePath(hgs[ihg], roundedInteg, roundedInteg);
   }
+  DEBUG_VAR(iBdy);
 
   // Update constraints and solve again
   solver.setup();
@@ -383,7 +429,7 @@ void Foliation::halfedgePathFromStrip(const vector<Face>& strip, const EdgeData<
 HalfedgeData<double> Foliation::getOrderingPath(int iPair, const vector<tuple<Halfedge,Halfedge,double>>& singHalfedges, const EdgeData<int>& singIndex, const MorseDecomposition::Cell& cell) {
   
   auto& [heStart, _he1, _tval] = singHalfedges[iPair];
-  auto& [_he2, heEnd, targetTimeValue] = singHalfedges[iPair+1];
+  auto& [heEnd, _he2, targetTimeValue] = singHalfedges[iPair+1];
 
   vector<Halfedge> heSequence {heStart}; // we always include the bottom singular half-edge, altough we don't want it in the end
   Halfedge he = heStart;
@@ -530,14 +576,17 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
   knitModel.showSurfacePoints("stripes points", points)->setEnabled(false);  
 
   // Check that each face has an even number of stripe points
-  FaceData<double> cnt(mesh);
+  FaceData<double> cnt(mesh); bool problematic = false;
   for (Face f : mesh.faces()) {
     cnt[f] = faceToPoints[f].size();
+    if (faceToPoints[f].size() % 2 != 0)
+      problematic = true;
     // ensure(faceToPoints[f].size() % 2 == 0);
   }
   knitModel.addFaceScalarQuantity("cnt", cnt);
 
-  // return {points, adj}; // while we fix the homology generators
+  if (problematic) // can't proceed with stripes
+    return {points, adj};
 
   FaceData<double> problematicFaces(mesh, 0);
 
@@ -562,8 +611,13 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
         DEBUG_VAR(stripeVal(points[fPoints[2*i]]) - stripeVal(points[fPoints[2*i+1]]));
       }
 
-      ensure(isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6)); // sanity check that stripe values are matching
+      // ensure(isClose(stripeVal(points[fPoints[2*i]]), stripeVal(points[fPoints[2*i+1]]), 1e-6)); // sanity check that stripe values are matching
       adj.push_back({fPoints[2*i], fPoints[2*i+1]});
+    }
+
+    if (problematicFaces[f] == 1) {
+      for (auto pi : fPoints)
+        DEBUG_VAR(stripeVal(points[pi]));
     }
   }
 

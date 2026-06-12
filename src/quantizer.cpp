@@ -201,6 +201,7 @@ vector<SurfacePoint> Quantizer::quantizeMeasure(VertexData<double>& measure, int
 
   }
   cout << "\n\n";
+  cout << setprecision(6); // revert to something reasonable
 
   // Render fuzzy power diagram
   knitModel.addPowerDiagram("power diagram", cellIndicators);
