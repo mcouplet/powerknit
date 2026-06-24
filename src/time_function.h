@@ -2,6 +2,8 @@
 
 #include "knit_model.h"
 
+enum class KnitDirection { Course, Wale }; // we might want to put this in a specific shared header, under a namespace
+
 // This class will handle everything related to the time function:
 // its gradient and rotated gradient, saddle loops, level sets, curl measures, ...
 class TimeFunction {
@@ -27,6 +29,19 @@ public:
     sort(points.begin(), points.end(), [this](const T& a, const T& b) {
       return (*this)(a) < (*this)(b);
     });
+  }
+
+  // Check if edge is withing `maxAngle` of the `dir` guiding field
+  // maxAngle should be in [0,π/2]. Function is always false if maxAngle=0, always true if = π/2
+  bool isAligned(Halfedge he, KnitDirection dir, double maxAngle=M_PI/4) const {
+    ensure(between(maxAngle, {0, M_PI/2}));
+    const FaceData<Vector2>& guide = (dir == KnitDirection::Course) ? courseGuide : waleGuide;
+    Vector2 grad = guide[he.face()].normalize();
+    Vector2 heVec = knitModel.geom().halfedgeVectorsInFace[he].normalize();
+    return (abs(dot(grad, heVec)) >= cos(maxAngle));
+  }
+  bool isAligned(Edge e, KnitDirection dir, double maxAngle=M_PI/4) const {
+    return isAligned(e.halfedge(), dir, maxAngle);
   }
 
   // For the Morse decomposition, we need to decide if we want cylinders

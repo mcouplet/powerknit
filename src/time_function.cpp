@@ -62,7 +62,14 @@ TimeFunction::TimeFunction(KnitSubModel& _knitModel, const TimeFunction& parent)
   splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
   splitMeasure(waleCurl, posWaleCurl, negWaleCurl);
   // Do we need to transfer other stuff? Yes: time function grad. Safer to just recompute it on the sub-model
+  // Also transfer guiding fields
   computeTimeFunctionGrad();
+  courseGuide = FaceData<Vector2>(mesh);
+  waleGuide   = FaceData<Vector2>(mesh);
+  for (Face f : mesh.faces()) {
+    courseGuide[f] = timeFunctionGrad[f].normalize();
+    waleGuide[f] = courseGuide[f].rotate90();
+  }
 }
 
 void TimeFunction::computeTimeFunction(KnitModel& fullKnitModel) {

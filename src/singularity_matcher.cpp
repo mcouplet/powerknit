@@ -11,15 +11,13 @@ vector<pair<SurfacePoint,SurfacePoint>> SingularityMatcher::match(const vector<S
   vector<SurfacePoint> sortedPosSings = sortByTime(posSings);
   vector<SurfacePoint> sortedNegSings = sortByTime(negSings);
 
-  double alignThreshold = 0.5;
-
   vector<pair<SurfacePoint,SurfacePoint>> matchedSings;
   for (int i = 0; i < nPairs; i++) {
     SurfacePoint p1 = sortedPosSings[i], p2 = sortedNegSings[i];
     double t1 = timeFunction(p1), t2 = timeFunction(p2);
     double tavg = (t1+t2)/2;
-    projectOnIsoline(p1, tavg, alignThreshold);
-    projectOnIsoline(p2, tavg, alignThreshold);
+    projectOnIsoline(p1, tavg);
+    projectOnIsoline(p2, tavg);
     ensure(abs(timeFunction(p1) - timeFunction(p2)) < 1e-6); // sanity check
     matchedSings.push_back({p1,p2});
   }
@@ -53,10 +51,7 @@ void SingularityMatcher::projectOnIsoline(SurfacePoint& point, double target, do
   double minDist = DBL_MAX;
   for (Edge e : knitModel.mesh().edges()) {
 
-    Halfedge he = e.halfedge();
-    Vector2 grad = timeFunction.timeFunctionGrad[he.face()].normalize(); // we're just taking any face
-    Vector2 heVec = knitModel.geom().halfedgeVectorsInFace[he].normalize();
-    if (abs(dot(grad, heVec)) < alignThreshold) continue;
+    if (!timeFunction.isAligned(e, KnitDirection::Course)) continue;
 
     Vertex v1 = e.firstVertex(), v2 = e.secondVertex();
     double t1 = timeFunction(v1), t2 = timeFunction(v2);

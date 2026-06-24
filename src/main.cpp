@@ -24,11 +24,15 @@ int main(int argc, char** argv) {
   fs::path inPath;
   fs::path knitGraphPath;
   optional<double> period;
+  optional<int> targetCourseSings, targetPosWaleSings, targetNegWaleSings;
   bool verbose = false;
   bool nogui = false;
   app.add_option("inFileName", inPath, "Input mesh and metadata as .json or .obj.")->required()->check(CLI::ExistingFile);
   app.add_option("-o,--output", knitGraphPath, "Output knit graph file")->default_val("knitgraph.txt");
   app.add_option("-p,--period", period, "Period for the stripe pattern; default is 0.01 * shape length scale.");
+  app.add_option("--n-course", targetCourseSings, "Target number of course singularity pairs; default is computed from curl signal.");
+  app.add_option("--n-pos-wale", targetPosWaleSings, "Target number of positive wale singularities; default is computed from curl signal.");
+  app.add_option("--n-neg-wale", targetNegWaleSings, "Target number of negative wale singularities; default is computed from curl signal.");
   app.add_flag("-v,--verbose", verbose, "Enable verbose output.");
   app.add_flag("--nogui", nogui, "Disable the polyscope viewer.");
   // TODO: add options for number of singularities and stuff
@@ -67,8 +71,12 @@ int main(int argc, char** argv) {
   // knitModel.showSurfacePoints("sites", sites);
 
   MorseDecomposition morseDecomp(timeFunction);
+  Quantizer quantizer(knitModel);
 
   vector<vector<pair<SurfacePoint,SurfacePoint>>> pairedCourseSingsPerCell(morseDecomp.cells.size());
+
+  double totalPosCourseMass = quantizer.totalMass(timeFunction.posCourseCurl);
+  double totalNegCourseMass = quantizer.totalMass(timeFunction.negCourseCurl);
 
   for (auto& cell : morseDecomp.cells) {
 
@@ -82,14 +90,20 @@ int main(int argc, char** argv) {
     cell.model().addMeasure("neg wale curl", cell.timeFunction.negWaleCurl)->setColorMap("blues");
 
     // Quantize to singularities
-    Quantizer quantizer(cell.model());
-    double avgTotalMass = (quantizer.totalMass(cell.timeFunction.posCourseCurl) + quantizer.totalMass(cell.timeFunction.negCourseCurl)) / 2;
-    int nSings = avgTotalMass / *period;
+    Quantizer cellQuantizer(cell.model());
+    double avgTotalMass = (cellQuantizer.totalMass(cell.timeFunction.posCourseCurl) + cellQuantizer.totalMass(cell.timeFunction.negCourseCurl)) / 2;
+    
+    int nSings;
+    if (targetCourseSings)
+      nSings = round(*targetCourseSings * avgTotalMass / ((totalPosCourseMass+totalNegCourseMass)/2)); // pro-rate by mass on this cell
+    else
+      nSings = round(avgTotalMass / *period);
+
     cout << format("Quantizing positive course curl measure to {} singularities.", nSings) << endl;
-    vector<SurfacePoint> posCourseSings = quantizer.quantizeMeasure(cell.timeFunction.posCourseCurl, nSings);
+    vector<SurfacePoint> posCourseSings = cellQuantizer.quantizeMeasure(cell.timeFunction.posCourseCurl, nSings);
     cell.timeFunction.sortByTime(posCourseSings);
     cout << format("Quantizing negative course curl measure to {} singularities.", nSings) << endl;
-    vector<SurfacePoint> negCourseSings = quantizer.quantizeMeasure(cell.timeFunction.negCourseCurl, nSings);
+    vector<SurfacePoint> negCourseSings = cellQuantizer.quantizeMeasure(cell.timeFunction.negCourseCurl, nSings);
     cell.timeFunction.sortByTime(negCourseSings);
     cell.model().showSurfacePoints("pos course sings", posCourseSings)->setPointColor({1,0,0})->setEnabled(false);
     cell.model().showSurfacePoints("neg course sings", negCourseSings)->setPointColor({0,0,1})->setEnabled(false);
@@ -122,10 +136,11 @@ int main(int argc, char** argv) {
 
   // The wale part is done on the whole model
   // Mask wale curl
-  Quantizer quantizer(knitModel);
-  vector<SurfacePoint> posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *period);
-  vector<SurfacePoint> negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
-  knitModel.showSurfacePoints("posWaleSings", posWaleSings);
+  vector<SurfacePoint> posWaleSings, negWaleSings;
+  if (targetPosWaleSings) posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *targetPosWaleSings);
+  else                    posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *period);
+  if (targetNegWaleSings) negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *targetNegWaleSings);
+  else                    negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
 
   // Stripes! The best part
   Foliation foliation(knitModel, morseDecomp);

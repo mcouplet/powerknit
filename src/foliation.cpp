@@ -240,7 +240,6 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
 
 }
 
-
 void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings, double period) {
 
   ManifoldSurfaceMesh& mesh = knitModel.mesh();
@@ -249,11 +248,15 @@ void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<Surf
 
   // Put singularities on edges
   auto projectToNearestEdge = [&] (const SurfacePoint& p) {
-    int imin = 0; // smallest barycentric coord
-    for (int i = 1; i < 3; i++)
-      if (p.faceCoords[i] < p.faceCoords[imin])
-        imin = i;
+    int imin = -1; // smallest barycentric coord
     Halfedge he = p.face.halfedge().next();
+    for (int i = 0; i < 3; i++, he=he.next()) {
+      if (timeFunction.isAligned(he, KnitDirection::Wale))
+        if (imin == -1 || p.faceCoords[i] < p.faceCoords[imin])
+          imin = i;
+    }
+    ensure(imin != -1); // none of the edges are aligned: could be caused by a sliver triangle
+    he = p.face.halfedge().next();
     for (int j = 0; j < imin; j++) he = he.next();
     double t1 = p.faceCoords[(imin+1)%3], t2 = p.faceCoords[(imin+2)%3];
     double tHe = (t2) / (t1+t2);
