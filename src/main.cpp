@@ -127,9 +127,6 @@ int main(int argc, char** argv) {
   vector<SurfacePoint> negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
   knitModel.showSurfacePoints("posWaleSings", posWaleSings);
 
-  DEBUG_VAR(&knitModel.mesh());
-  // DEBUG_VAR(posWaleSings[0].edge.getMesh());
-
   // Stripes! The best part
   Foliation foliation(knitModel, morseDecomp);
   foliation.computeCourse(pairedCourseSingsPerCell, *period);

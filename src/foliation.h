@@ -31,7 +31,7 @@ private:
 
   // Assumes singularities are on edges and not on faces! I.e., sigma integrates to 0 inside faces.
   // For the version that handles singular faces, look at computeStripeValuesFromOneForm() from the old codebase.
-  CornerData<double> computeStripeValuesFromOneForm(HalfedgeData<double>& sigma);
+  CornerData<double> computeStripeValuesFromOneForm(HalfedgeData<double>& sigma, double period);
 
   std::tuple<std::vector<SurfacePoint>, std::vector<std::pair<int,int>>> traceStripes(CornerData<double>& stripeValues, double period);
 
@@ -68,6 +68,11 @@ private:
     void constrainHalfedgeOrientation(const EdgeData<int>& singIndex, const TimeFunction& tf);
     void setup();
     HalfedgeData<double> solve();
+
+    // Per-constraint violation of sigma against its bounds:
+    // viol[i] = max(0, lb_i - (C sigma)_i, (C sigma)_i - ub_i). Indexed by
+    // constraint row, in the order constraints were added.
+    std::vector<double> constraintViolations(const HalfedgeData<double>& sigma) const;
 
     // void updateSolver(OsqpEigen::Solver& solver) {
     //   Eigen::SparseMatrix<double> C(m, knitModel.mesh().nHalfedges());

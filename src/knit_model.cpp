@@ -394,7 +394,7 @@ vector<polyscope::CurveNetwork*> KnitModel::showHomologyGenerators() const {
       hgEdges.push_back(he.edge());
     views.push_back(showEdges(format("homology generator {}", i++), hgEdges)->setRadius(0.0025));
   }
-  // for (auto& view : views) view->setEnabled(false);
+  for (auto& view : views) view->setEnabled(false);
   return views;
 }
 

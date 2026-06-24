@@ -129,19 +129,6 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   HalfedgeData<double> sigma = solver.solve();
   knitModel.addHalfedgeScalarQuantity("course sigma", sigma, polyscope::DataType::SYMMETRIC);
 
-  // Viz d1(sigma)
-  FaceData<double> d1sigma(mesh, 0.0);
-  for (Face f : mesh.faces())
-    for (Halfedge he : f.adjacentHalfedges())
-      d1sigma[f] += sigma[he];
-  knitModel.addFaceScalarQuantity("d1sigma", d1sigma, polyscope::DataType::SYMMETRIC);
-
-  // Viz d1^B(sigma)
-  EdgeData<double> d1Bsigma(mesh, 0.0);
-  for (Edge e : mesh.edges())
-    for (Halfedge he : e.adjacentHalfedges())
-      d1Bsigma[e] += sigma[he];
-  knitModel.addEdgeScalarQuantity("d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
 
   // polyscope::show();
 
@@ -199,31 +186,54 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
   }
 
 
-  CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma);
+  CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma, period);
+
   knitModel.addCornerScalarQuantity("course stripe values", stripeValues);
 
   // Sanity check: d1 on stripe values
+  int nviol = 0; double maxviol = 0;
   for (Edge e : mesh.edges()) {
     Halfedge he = e.halfedge();
     double s1 = stripeValues[he.next().corner()] - stripeValues[he.corner()];
     he = he.twin();
     double s2 = stripeValues[he.next().corner()] - stripeValues[he.corner()];
     double d1 = -s1 - s2;
+    maxviol = max(maxviol, abs(d1 - singIndex[e]*period));
     if (!isClose(d1, singIndex[e]*period)) {
-      DEBUG_VAR(d1);
-      DEBUG_VAR(singIndex[e]);
+      ++nviol;
     }
   }
+  DEBUG_PRINT("Edge d1: {} violation, max = {}", nviol, maxviol);
 
-  // // Sanity check that stripe values at a vertex are equal up to period
-  // for (Vertex v : mesh.vertices()) {
-  //   double val = mod(stripeValues[v.corner()], period);
-  //   for (Corner co : v.adjacentCorners()) {
-  //     if (!isClose(mod(stripeValues[co], period), val)) {
-  //       DEBUG_VAR(mod(stripeValues[co], period) - val);
-  //     }
-  //   }
-  // }
+  // Sanity check that stripe values at a vertex are equal up to period
+  nviol = 0, maxviol = 0;
+  for (Vertex v : mesh.vertices()) {
+    double val = mod(stripeValues[v.corner()], period);
+    for (Corner co : v.adjacentCorners()) {
+      maxviol = max(maxviol, abs(mod(stripeValues[co], period) - val));
+      if (!isClose(mod(stripeValues[co], period), val)) {
+        ++nviol;
+        // DEBUG_VAR(mod(stripeValues[co], period) - val);
+      }
+    }
+  }
+  DEBUG_PRINT("Vertex stripe values: {} violation, max = {}", nviol, maxviol);
+
+  // Viz d1(sigma)
+  FaceData<double> d1sigma(mesh, 0.0);
+  for (Face f : mesh.faces())
+    for (Halfedge he : f.adjacentHalfedges())
+      d1sigma[f] += sigma[he];
+  knitModel.addFaceScalarQuantity("d1sigma", d1sigma, polyscope::DataType::SYMMETRIC);
+
+  // Viz d1^B(sigma)
+  EdgeData<double> d1Bsigma(mesh, 0.0);
+  for (Edge e : mesh.edges())
+    for (Halfedge he : e.adjacentHalfedges())
+      d1Bsigma[e] += sigma[he];
+  knitModel.addEdgeScalarQuantity("d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
+
+
 
   auto [points, adj] = traceStripes(stripeValues, period);
   knitModel.showSurfacePointNetwork("course stripes", points, adj)->setRadius(1e-3);
@@ -375,9 +385,7 @@ void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<Surf
       d1Bsigma[e] += sigma[he];
   knitModel.addEdgeScalarQuantity("wale d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
 
-  polyscope::show();
-
-  CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma);
+  CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma, period);
   knitModel.addCornerScalarQuantity("wale stripe values", stripeValues);
 
   auto [points, adj] = traceStripes(stripeValues, period);
@@ -464,7 +472,7 @@ HalfedgeData<double> Foliation::getOrderingPath(int iPair, const vector<tuple<Ha
   return pathWeights;
 }
 
-CornerData<double> Foliation::computeStripeValuesFromOneForm(HalfedgeData<double>& sigma) {
+CornerData<double> Foliation::computeStripeValuesFromOneForm(HalfedgeData<double>& sigma, double period) {
 
   ManifoldSurfaceMesh& mesh = knitModel.mesh();
 
@@ -512,6 +520,21 @@ CornerData<double> Foliation::computeStripeValuesFromOneForm(HalfedgeData<double
     alpha[hki.corner()] = alpha[hjk.corner()] + sigma[hjk];
     // DEBUG_VAR(abs(alpha[hij.corner()] - alpha[hki.corner()] - sigma[hki]));
     ensure(abs(alpha[hij.corner()] - alpha[hki.corner()] - sigma[hki]) < 1e-2);
+  }
+
+  // Correct stripe values by snapping them to the average value around a vertex
+  for (Vertex v : mesh.vertices()) {
+    // Every alpha is circle-valued and can be encoded as a complex number z = e^(i*⍺*2π/P).
+    // We average those and project them back to the circle.
+    complex<double> zSum(0,0);
+    for (Corner co : v.adjacentCorners()) {
+      zSum += std::polar(1.0, alpha[co]*2*M_PI/period);
+    }
+    double alphaProj = period/(2*M_PI) * arg(zSum);
+    for (Corner co : v.adjacentCorners()) {
+      int n = round((alpha[co] - alphaProj)/period);
+      alpha[co] = alphaProj + n*period;
+    }
   }
 
   return alpha;
@@ -763,10 +786,11 @@ void Foliation::Solver::setup() {
 
   // Parameters
   solver.settings()->setPolish(true); // for more accurate results
-  solver.settings()->setAbsoluteTolerance(1e-9);
-  solver.settings()->setRelativeTolerance(1e-9);
-  solver.settings()->setPrimalInfeasibilityTolerance(1e-9);
-  solver.settings()->setDualInfeasibilityTolerance(1e-9);
+  solver.settings()->setAbsoluteTolerance(1e-8);
+  solver.settings()->setRelativeTolerance(1e-8);
+  solver.settings()->setPrimalInfeasibilityTolerance(1e-8);
+  solver.settings()->setDualInfeasibilityTolerance(1e-8);
+  // solver.settings()->setAlpha(1.0);
   solver.settings()->setMaxIteration(10000);
 
 }
@@ -775,4 +799,20 @@ HalfedgeData<double> Foliation::Solver::solve() {
   solver.initSolver();
   solver.solveProblem();
   return HalfedgeData<double> (knitModel.mesh(), solver.getSolution());
+}
+
+std::vector<double> Foliation::Solver::constraintViolations(const HalfedgeData<double>& sigma) const {
+  const auto& x = sigma.raw(); // indexed by halfedge index == constraint column
+
+  // C * sigma, accumulated directly from the triplets (rows are constraints).
+  std::vector<double> Cx(m, 0.0);
+  for (const auto& t : triplets)
+    Cx[t.row()] += t.value() * x[t.col()];
+
+  // Distance outside [lb, ub]. inf bounds use the OSQP sentinel (~1e30), so the
+  // inactive side stays hugely negative and max() ignores it (no NaN).
+  std::vector<double> viol(m, 0.0);
+  for (int i = 0; i < m; i++)
+    viol[i] = std::max(0.0, std::max(lbs[i] - Cx[i], Cx[i] - ubs[i]));
+  return viol;
 }
