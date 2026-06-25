@@ -58,8 +58,8 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
     cell.model().showSurfacePoints("dropped neg", droppedNeg)->setEnabled(false);
     
     auto [prunedPosSings, prunedNegSings] = unzip(prunedPairs);
-    cell.model().showSurfacePoints("pruned pos course sings", prunedPosSings)->setPointColor({1,0,0});
-    cell.model().showSurfacePoints("pruned neg course sings", prunedNegSings)->setPointColor({0,0,1});
+    cell.model().showSurfacePoints("pruned pos course sings", prunedPosSings)->setPointColor({1,0,0})->setEnabled(false);
+    cell.model().showSurfacePoints("pruned neg course sings", prunedNegSings)->setPointColor({0,0,1})->setEnabled(false);
 
     // cell.model().addEdgeScalarQuantity("sing index", singIndex, polyscope::DataType::SYMMETRIC);
 
@@ -236,7 +236,7 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
 
 
   auto [points, adj] = traceStripes(stripeValues, period);
-  knitModel.showSurfacePointNetwork("course stripes", points, adj)->setRadius(1e-3);
+  knitModel.showSurfacePointNetwork("course stripes", points, adj)->setRadius(1e-3)->setColor({0.0, 1.0, 0.0});
 
 }
 
@@ -266,8 +266,8 @@ void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<Surf
   vector<SurfacePoint> posSingsOnEdges, negSingsOnEdges;
   for (auto& p : posSings) posSingsOnEdges.push_back(projectToNearestEdge(p));
   for (auto& p : negSings) negSingsOnEdges.push_back(projectToNearestEdge(p));
-  knitModel.showSurfacePoints("posWaleSingsOnEdges", posSingsOnEdges);
-  knitModel.showSurfacePoints("negWaleSingsOnEdges", negSingsOnEdges);
+  knitModel.showSurfacePoints("posWaleSingsOnEdges", posSingsOnEdges)->setEnabled(false);
+  knitModel.showSurfacePoints("negWaleSingsOnEdges", negSingsOnEdges)->setEnabled(false);
 
   // Get edge indices
   EdgeData<int> singIndex(mesh, 0);
@@ -392,7 +392,7 @@ void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<Surf
   knitModel.addCornerScalarQuantity("wale stripe values", stripeValues);
 
   auto [points, adj] = traceStripes(stripeValues, period);
-  knitModel.showSurfacePointNetwork("wale stripes", points, adj)->setRadius(1e-3);
+  knitModel.showSurfacePointNetwork("wale stripes", points, adj)->setRadius(1e-3)->setColor({1.0, 0.5, 0.0});
 
 
 }
@@ -795,6 +795,7 @@ void Foliation::Solver::setup() {
   solver.settings()->setDualInfeasibilityTolerance(1e-8);
   // solver.settings()->setAlpha(1.0);
   solver.settings()->setMaxIteration(10000);
+  solver.settings()->setCheckDualGap(false);
 
 }
 

@@ -291,5 +291,5 @@ void TimeFunction::cutSaddleLoops(KnitModel& fullKnitModel) {
   for (Edge e : sepEdges)
     isSeparatrix[e] = true;
   
-  fullKnitModel.showSeparatrices()->setRadius(1e-3);
+  fullKnitModel.showSeparatrices()->setRadius(1e-3)->setEnabled(false);
 }
