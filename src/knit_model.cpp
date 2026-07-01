@@ -206,6 +206,8 @@ void KnitModel::printStats() {
 	std::cout << "Number of boundary loops in the glued mesh " << pMesh->nBoundaryLoops() << std::endl;
 	std::cout << "Number of connected components in the original mesh " << pGlobalMesh->nConnectedComponents() << std::endl;
 	std::cout << "Number of connected components ih the glued mesh " << pMesh->nConnectedComponents() << std::endl;
+  std::cout << "Euler characteristic of original mesh: " << pGlobalMesh->nVertices() - pGlobalMesh->nEdges() + pGlobalMesh->nFaces() << std::endl;
+  std::cout << "Euler characteristic of glued mesh: " << pMesh->nVertices() - pMesh->nEdges() + pMesh->nFaces() << std::endl;
 	std::cout << "Is original mesh oriented " << pGlobalMesh->isOriented() << std::endl;
 	std::cout << "Is glued mesh oriented " << pMesh->isOriented() << std::endl;
 
@@ -409,25 +411,36 @@ polyscope::CurveNetwork* KnitModel::showSurfacePointNetwork(string name, const v
 
   for (auto& [i,j] : adj) {
     const SurfacePoint &pi = points[i], &pj = points[j];
-    // pi and pj share a face: find which one
-    Face sharedFace;
-    for (Face fi : pi.edge.adjacentFaces())
-      for (Face fj : pj.edge.adjacentFaces())
-        if (fi == fj)
-          sharedFace = fi;
-    
-    auto getPosition = [&](const SurfacePoint& p) { // get the 3D position of some surface point in the shared face
-      double t = p.tEdge;
-      Halfedge he = p.edge.halfedge(); if (he.face() != sharedFace) he = he.twin(), t = 1-t;
-      for (Halfedge heGlobal : halfedgeGluedToGlobal.at(he)) {
-        if (heGlobal.isInterior())
-          return (1-t) * vpos[heGlobal.tailVertex()] + t * vpos[heGlobal.tipVertex()];
-      }
-      return Vector3();
-    };
 
-    nodes.push_back(getPosition(pi));
-    nodes.push_back(getPosition(pj));
+    if (pi.type == SurfacePointType::Edge && pj.type == SurfacePointType::Edge) {
+
+      // pi and pj share a face: find which one
+      // We need to be careful of this to avoid tracing an edge across glued faces
+      Face sharedFace;
+      for (Face fi : pi.edge.adjacentFaces())
+        for (Face fj : pj.edge.adjacentFaces())
+          if (fi == fj)
+            sharedFace = fi;
+      
+      auto getPosition = [&](const SurfacePoint& p) { // get the 3D position of some surface point in the shared face
+        double t = p.tEdge;
+        Halfedge he = p.edge.halfedge(); if (he.face() != sharedFace) he = he.twin(), t = 1-t;
+        for (Halfedge heGlobal : halfedgeGluedToGlobal.at(he)) {
+          if (heGlobal.isInterior())
+            return (1-t) * vpos[heGlobal.tailVertex()] + t * vpos[heGlobal.tipVertex()];
+        }
+        return Vector3();
+      };
+
+      nodes.push_back(getPosition(pi));
+      nodes.push_back(getPosition(pj));
+    } else {
+      // Just use the barycentric coordinates in the face
+      nodes.push_back(getSurfacePointPositions(pi)[0]);
+      nodes.push_back(getSurfacePointPositions(pj)[0]);
+    }
+
+
     edges.push_back({nodes.size()-2, nodes.size()-1});
 
   }

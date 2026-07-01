@@ -11,7 +11,7 @@ using namespace std;
 
 // Singularities are SurfacePoint's on edges *of the sub-mesh*.
 // Pairs are (+1, -1)
-void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pairedSingsPerCell, double period) {
+tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pairedSingsPerCell, double period) {
 
   ManifoldSurfaceMesh& mesh = knitModel.mesh();
   EdgeLengthGeometry& geom = knitModel.geom();
@@ -20,8 +20,10 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
 
   // Put singularities on edges and make sure there's only 1 per edge
   EdgeData<int> singIndex(mesh, 0); // on parent mesh. 0, +1 or -1
+  EdgeData<int> singOrderGlobal(mesh, 0); // on parent mesh
   vector<vector<tuple<Halfedge, Halfedge, double>>> singHalfedgesPerCell(nCells); // half-edge points UP in terms of time function. Pruned and ordered. We also attach the time value
   vector<EdgeData<int>> singOrderPerCell; // 0, +i or -i where i is the order from 1 to n
+  int singCount = 0;
   for (auto& cell : morseDecomp.cells) {
 
     auto& pairedSings = pairedSingsPerCell[cell.getIndex()]; // shorthand
@@ -63,19 +65,22 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
 
     // cell.model().addEdgeScalarQuantity("sing index", singIndex, polyscope::DataType::SYMMETRIC);
 
-    // Populate singIndex on parent
+    // Populate singIndex and singOrder on parent
     for (Edge e : cell.model().mesh().edges()) {
       int order = singOrder[e];
       Edge pe = cell.model().transferToParent(e); // parent edge
       if (order > 0) singIndex[pe] = +1;
       if (order < 0) singIndex[pe] = -1;
+      singOrderGlobal[pe] = order + sgn(order)*singCount;
     }
+
+    singCount += prunedPairs.size();
   }
 
   EdgeData<double> singIndexViz(mesh, 0);
   for (Edge e : mesh.edges())
-    singIndexViz[e] = singIndex[e];
-  knitModel.addEdgeScalarQuantity("course singIndex", singIndexViz);
+    singIndexViz[e] = singOrderGlobal[e];
+  knitModel.addEdgeScalarQuantity("course singOrderGlobal", singIndexViz);
 
   // OSQP (Operator Splitting Quadratic Program) solver.
   Solver solver(knitModel); // our wrapper
@@ -107,7 +112,7 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
       // cell.model().addFaceScalarQuantity(format("triangle strip (t={})", tval), triangleStripViz);
       HalfedgeData<double> pathWeights(cell.model().mesh(), 0.0);
       halfedgePathFromStrip(triangleStrip, singOrder, iPair, tval, cell, pathWeights);
-      // cell.model().addHalfedgeScalarQuantity(format("halfedge path (t={})", tval), pathWeights);
+      cell.model().addHalfedgeScalarQuantity(format("halfedge path (t={})", tval), pathWeights);
 
       // Constrain symmetric short row ends
       solver.constrainSymmetricShortRowEnds(phe1, phe2);
@@ -233,14 +238,19 @@ void Foliation::computeCourse(vector<vector<pair<SurfacePoint,SurfacePoint>>> pa
       d1Bsigma[e] += sigma[he];
   knitModel.addEdgeScalarQuantity("d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
 
+  // // Offset stripe values 
+  // for (Corner co : mesh.corners())
+  //   stripeValues[co] += period/2;
 
+  CornerData<double> stripeValuesOffset = stripeValues-period/4;
 
-  auto [points, adj] = traceStripes(stripeValues, period);
+  auto [points, adj] = traceStripes(stripeValuesOffset, period); // offset to match knit graph
   knitModel.showSurfacePointNetwork("course stripes", points, adj)->setRadius(1e-3)->setColor({0.0, 1.0, 0.0});
 
+  return {stripeValues, singOrderGlobal};
 }
 
-void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings, double period) {
+tuple<CornerData<double>, EdgeData<int>> Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings, double period) {
 
   ManifoldSurfaceMesh& mesh = knitModel.mesh();
   EdgeLengthGeometry& geom = knitModel.geom();
@@ -388,13 +398,16 @@ void Foliation::computeWale(std::vector<SurfacePoint> posSings, std::vector<Surf
       d1Bsigma[e] += sigma[he];
   knitModel.addEdgeScalarQuantity("wale d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
 
+
   CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma, period);
   knitModel.addCornerScalarQuantity("wale stripe values", stripeValues);
 
-  auto [points, adj] = traceStripes(stripeValues, period);
+  CornerData<double> stripeValuesOffset = stripeValues-period/4;
+
+  auto [points, adj] = traceStripes(stripeValuesOffset, period);
   knitModel.showSurfacePointNetwork("wale stripes", points, adj)->setRadius(1e-3)->setColor({1.0, 0.5, 0.0});
 
-
+  return {stripeValues, singIndex};
 }
 
 // Input halfedges and output faces are on sub-mesh.
@@ -462,7 +475,7 @@ HalfedgeData<double> Foliation::getOrderingPath(int iPair, const vector<tuple<Ha
 
   vector<Face> triangleStrip = traceIsolineTriangleStrip(heSequence.back(), heEnd, targetTimeValue, cell);
   HalfedgeData<double> pathWeights(cell.model().mesh(), 0.0);
-  halfedgePathFromStrip(triangleStrip, singIndex, iPair+1, targetTimeValue, cell, pathWeights);
+  halfedgePathFromStrip(triangleStrip, singIndex, iPair, targetTimeValue, cell, pathWeights);
 
   // Add vertical sequence to pathWeights. Skip first which is the bottom pos edge
   for (int i = 1; i < heSequence.size(); i++)

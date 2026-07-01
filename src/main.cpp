@@ -11,6 +11,7 @@
 #include "quantizer.h"
 #include "singularity_matcher.h"
 #include "foliation.h"
+#include "knit_graph.h"
 
 using namespace std;
 
@@ -116,6 +117,9 @@ int main(int argc, char** argv) {
     cell.model().showSurfacePoints("matched pos course sings", matchedPosCourseSings)->setPointColor({1,0,0})->setEnabled(false);
     cell.model().showSurfacePoints("matched neg course sings", matchedNegCourseSings)->setPointColor({0,0,1})->setEnabled(false);
 
+    auto angleParam = singularityMatcher.computeAngleParam();
+    cell.model().addCornerScalarQuantity("angle param", angleParam);
+
     // // sanity check that sings are still aligned when transferring to parent
     // vector<SurfacePoint> parentPosCourseSings, parentNegCourseSings;
     // for (SurfacePoint& sp : matchedPosCourseSings) parentPosCourseSings.push_back(cell.model().transferToParent(sp));
@@ -134,6 +138,8 @@ int main(int argc, char** argv) {
     // }
   }
 
+  // polyscope::show();
+
   // The wale part is done on the whole model
   // Mask wale curl
   vector<SurfacePoint> posWaleSings, negWaleSings;
@@ -144,13 +150,15 @@ int main(int argc, char** argv) {
 
   // Stripes! The best part
   Foliation foliation(knitModel, morseDecomp);
-  foliation.computeCourse(pairedCourseSingsPerCell, *period);
-  foliation.computeWale(posWaleSings, negWaleSings, *period);
+  auto [courseStripeValues, courseEdgeIndex] = foliation.computeCourse(pairedCourseSingsPerCell, *period);
+  auto [waleStripeValues, waleEdgeIndex] = foliation.computeWale(posWaleSings, negWaleSings, *period);
 
+  polyscope::show();
 
   // knit graph module (whole model)
-  // get rid of Gurobi
-
+  KnitGraph knitGraph(knitModel, *period, *period, courseStripeValues, courseEdgeIndex, waleStripeValues, waleEdgeIndex);
+  knitGraph.buildGraph();
+  
   polyscope::show();
 
   return 0;

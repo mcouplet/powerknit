@@ -98,7 +98,7 @@ public:
   polyscope::PointCloud* showVertices(std::string name, const std::vector<Vertex>& vertices) const override;
   polyscope::CurveNetwork* showEdges(std::string name, const std::vector<Edge>& edges) const override;
   polyscope::PointCloud* showSurfacePoints(std::string name, const std::vector<SurfacePoint>& surfacePoints) const override;
-  polyscope::CurveNetwork* showSurfacePointNetwork(std::string name, const std::vector<SurfacePoint>& points, const std::vector<std::pair<int,int>>& adj) const;
+  polyscope::CurveNetwork* showSurfacePointNetwork(std::string name, const std::vector<SurfacePoint>& points, const std::vector<std::pair<int,int>>& adj) const; // assumes SurfacePoint's on edges: fix!
 
   // Specialized visualization
   polyscope::CurveNetwork* showSeparatrices() const;
@@ -167,7 +167,7 @@ private:
     return polyscope::registerCurveNetwork(name, positions, edgeIndices);
   }
 
-  // SurfacePoint is on *glued* mesh, and must be of edge type
+  // SurfacePoint is on *glued* mesh, and must be of Edge or Face type
   std::vector<Vector3> getSurfacePointPositions(const SurfacePoint& point) const;
 };
 

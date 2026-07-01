@@ -14,11 +14,13 @@ public:
   // Singularities are SurfacePoint's on edges *of the sub-mesh*.
   // Singularity pairs *must be sorted*.
   // Pairs are (+1, -1)
-  void computeCourse(std::vector<std::vector<std::pair<SurfacePoint,SurfacePoint>>> pairedSingsPerCell, double period);
+  std::tuple<CornerData<double>, EdgeData<int>> computeCourse(std::vector<std::vector<std::pair<SurfacePoint,SurfacePoint>>> pairedSingsPerCell, double period);
 
   // Singularities are SurfacePoint's on faces *of the parent mesh*.
-  void computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings, double period);
+  std::tuple<CornerData<double>, EdgeData<int>> computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings, double period);
   
+  std::tuple<std::vector<SurfacePoint>, std::vector<std::pair<int,int>>> traceStripes(CornerData<double>& stripeValues, double period);
+
 private:
 
   const KnitModel& knitModel; // the full model with b.c.'s. Can't infer it from the Morse decomposition.
@@ -33,7 +35,6 @@ private:
   // For the version that handles singular faces, look at computeStripeValuesFromOneForm() from the old codebase.
   CornerData<double> computeStripeValuesFromOneForm(HalfedgeData<double>& sigma, double period);
 
-  std::tuple<std::vector<SurfacePoint>, std::vector<std::pair<int,int>>> traceStripes(CornerData<double>& stripeValues, double period);
 
   class Solver {
 

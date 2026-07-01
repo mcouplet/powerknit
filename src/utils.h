@@ -14,6 +14,9 @@
   #define DEBUG_VAR(x)
 #endif
 
+#define MI(a,v) a = min(a,v)
+#define MA(a,v) a = max(a,v)
+
 template <typename T>
 bool between(T x, T a, T b) { return ((x - a) * (x - b)) <= 0; }
 
@@ -23,6 +26,11 @@ bool between(T x, std::pair<T,T> p) { return between(x, p.first, p.second); }
 // Mathematical modulo for double's
 inline double mod(double a, double b) {
     return std::fmod(std::fmod(a, b) + b, b);
+}
+
+//find the sign of a value
+template <typename T> int sgn(T val) {
+  return (T(0) < val) - (val < T(0));
 }
 
 // To print pairs easily

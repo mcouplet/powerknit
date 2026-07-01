@@ -177,6 +177,7 @@ add_executable(powerknit
     src/singularity_matcher.cpp
     src/foliation.cpp
     src/homology.cpp
+    src/knit_graph.cpp
 )
 
 target_link_libraries(powerknit PRIVATE
