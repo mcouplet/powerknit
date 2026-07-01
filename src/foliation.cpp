@@ -35,8 +35,8 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
 
     auto& singHalfedges = singHalfedgesPerCell[cell.getIndex()];
     int nDroppedPairs = 0;
-    for (int iPair = 0; iPair < pairedSings.size(); iPair++) {
-      auto &[s1,s2] = pairedSings[iPair];
+    int iPair = 0; // index of pair after pruning - needed to populate singOrder
+    for (auto &[s1,s2] : pairedSings) {
       double t1 = cell.timeFunction(s1), t2 = cell.timeFunction(s2);
       ensure(abs(t1-t2) < 1e-9); // sanity check
       Edge e1 = s1.edge, e2 = s2.edge;
@@ -45,13 +45,14 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
         // droppedPairs.push_back({cell.model().transferToParent(s1), cell.model().transferToParent(s2)});
         droppedPairs.push_back({s1, s2});
         continue;
-      } 
+      }
       singOrder[e1] = +(iPair+1), singOrder[e2] = -(iPair+1);
       Halfedge he1 = e1.halfedge(), he2 = e2.halfedge();
       if (cell.timeFunction(he1.tipVertex()) < cell.timeFunction(he1.tailVertex())) he1 = he1.twin();
       if (cell.timeFunction(he2.tipVertex()) < cell.timeFunction(he2.tailVertex())) he2 = he2.twin();
       singHalfedges.push_back({he1, he2, t1});
       prunedPairs.push_back({s1, s2});
+      iPair++;
     }
     DEBUG_PRINT("Dropped {} singularity pairs on cell #{}.", nDroppedPairs, cell.getIndex());
 
@@ -63,7 +64,10 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
     cell.model().showSurfacePoints("pruned pos course sings", prunedPosSings)->setPointColor({1,0,0})->setEnabled(false);
     cell.model().showSurfacePoints("pruned neg course sings", prunedNegSings)->setPointColor({0,0,1})->setEnabled(false);
 
-    // cell.model().addEdgeScalarQuantity("sing index", singIndex, polyscope::DataType::SYMMETRIC);
+    EdgeData<double> singOrderViz(cell.model().mesh(), 0);
+    for (Edge e : cell.model().mesh().edges())
+      singOrderViz[e] = singOrder[e];
+    cell.model().addEdgeScalarQuantity("sing order", singOrderViz, polyscope::DataType::SYMMETRIC);
 
     // Populate singIndex and singOrder on parent
     for (Edge e : cell.model().mesh().edges()) {

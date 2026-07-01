@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
   if (targetNegWaleSings) negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *targetNegWaleSings);
   else                    negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
 
-  // Stripes! The best part
+  // Stripes!
   Foliation foliation(knitModel, morseDecomp);
   auto [courseStripeValues, courseEdgeIndex] = foliation.computeCourse(pairedCourseSingsPerCell, *period);
   auto [waleStripeValues, waleEdgeIndex] = foliation.computeWale(posWaleSings, negWaleSings, *period);
