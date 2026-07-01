@@ -40,7 +40,7 @@ vector<pair<SurfacePoint,SurfacePoint>> SingularityMatcher::match(const vector<S
       double tDiff = abs(timeFunction(p2) - timeFunction(p1));
       double aDiff = mod(posSingAngles[i] - negSingAngles[j], 2*M_PI);
       cost[i][j] = (1-angleWeight) * tDiff + angleWeight * aDiff/(2*M_PI);
-      DEBUG_PRINT("({},{}): {}", i, j, aDiff);
+      // DEBUG_PRINT("({},{}): {}", i, j, aDiff);
     }
   }
   vector<int> l,r; bipartiteMatching(cost, l, r);
