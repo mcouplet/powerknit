@@ -21,6 +21,10 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
   cutSaddleLoops(_knitModel);
   findSaddles(); // hopefully they stay the same
 
+  // At this stage the mesh and geometry are final
+  heatSolver = make_unique<HeatMethodDistanceSolver>(knitModel.geom());
+
+  // Compute time function gradient
   knitModel.requireIntrinsicGrad();
   timeFunctionGrad = knitModel.computeIntrinsicGrad<Vector2>(timeFunction);
   knitModel.addFaceTangentVectorQuantity("time function grad", timeFunctionGrad);
@@ -32,12 +36,31 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
     courseGuide[f] = timeFunctionGrad[f].normalize();
     waleGuide[f] = courseGuide[f].rotate90();
   }
+  computeAngleWithGuidingField();
   knitModel.addFaceTangentVectorQuantity("course guiding field", courseGuide);
   knitModel.addFaceTangentVectorQuantity("wale guiding field", waleGuide);
 
   // Compute curl measures
   computeCurl(courseGuide, courseCurl);
   computeCurl(waleGuide, waleCurl);
+
+  // // Cap curl measure to avoid high concentration of singularities
+  // // Don't do capping if you're doing user editing with boosting, doesn't really make sense
+  // // TODO: not quite sure of the formula here, let's disable for now
+  // for (Vertex v : knitModel.mesh().vertices()) {
+  //   courseCurl[v] = fmin(courseCurl[v], +coursePeriod * (3*knitModel.geom().vertexDualAreas[v]));
+  //   courseCurl[v] = fmax(courseCurl[v], -coursePeriod * (3*knitModel.geom().vertexDualAreas[v]));
+  //   waleCurl[v] = fmin(waleCurl[v], +walePeriod * (3*knitModel.geom().vertexDualAreas[v]));
+  //   waleCurl[v] = fmax(waleCurl[v], -walePeriod * (3*knitModel.geom().vertexDualAreas[v]));
+  // }
+
+  // Mask curl measures around saddles
+  vector<Vertex> saddles;
+  for (Vertex v : knitModel.mesh().vertices())
+    if (isSaddle[v]) saddles.push_back(v);
+  maskCurl(saddles, coursePeriod, KnitDirection::Course);
+  maskCurl(saddles, walePeriod, KnitDirection::Wale);
+  
   knitModel.addVertexScalarQuantity("course curl", courseCurl, polyscope::DataType::SYMMETRIC);
   knitModel.addVertexScalarQuantity("wale curl", waleCurl, polyscope::DataType::SYMMETRIC);
 
@@ -70,6 +93,7 @@ TimeFunction::TimeFunction(KnitSubModel& _knitModel, const TimeFunction& parent)
     courseGuide[f] = timeFunctionGrad[f].normalize();
     waleGuide[f] = courseGuide[f].rotate90();
   }
+  computeAngleWithGuidingField();
 }
 
 void TimeFunction::computeTimeFunction(KnitModel& fullKnitModel) {
@@ -293,3 +317,35 @@ void TimeFunction::cutSaddleLoops(KnitModel& fullKnitModel) {
   
   fullKnitModel.showSeparatrices()->setRadius(1e-3)->setEnabled(false);
 }
+
+void TimeFunction::maskCurl(vector<Vertex>& sources, double r, KnitDirection d) {
+  if (sources.empty()) return; // heatSolver does garbage in that case
+  VertexData<double> dist = heatSolver->computeDistance(sources);
+  VertexData<double>& curlMeasure = (d == KnitDirection::Course) ?courseCurl : waleCurl;
+  for (Vertex v : knitModel.mesh().vertices())
+    curlMeasure[v] *= (dist[v] > r);
+  
+  // // Re-split the measure into positive and negative
+  // if (d == KnitDirection::Course)
+  //   splitMeasure(curlMeasure, posCourseCurl, negCourseCurl);
+  // else
+  //   splitMeasure(curlMeasure, posWaleCurl, negWaleCurl);
+}
+
+void TimeFunction::computeAngleWithGuidingField() {
+  knitModel.geom().requireHalfedgeVectorsInFace();
+  for (int dir = 0; dir < 2; dir++) {
+    angleWithGuidingField[dir] = HalfedgeData<double>(knitModel.mesh());
+    auto& guide = (dir == KnitDirection::Course) ? courseGuide : waleGuide;
+    for (Halfedge he : knitModel.mesh().interiorHalfedges()) {
+      Vector2 grad = guide[he.face()].normalize();
+      Vector2 heVec = knitModel.geom().halfedgeVectorsInFace[he].normalize();
+      double cosAngle = fmin(1, abs(dot(grad, heVec))); // clip for numerical safety
+      double angle = acos(cosAngle);
+      angleWithGuidingField[dir][he] = angle;
+      // DEBUG_VAR(dot(grad, heVec));
+      ensure(between(angle, {0, M_PI/2}));
+    }
+  }
+}
+

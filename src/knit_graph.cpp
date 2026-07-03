@@ -76,6 +76,14 @@ void KnitGraph::buildGraph(){
   makeRealVertices();
   makeFaceConnections();
   intrinsicMerge();
+
+  vector<SurfacePoint> hasNoColIn, hasNoColOut;
+  for (auto& v : allVertices) {
+    if (v->col_in_vertex[0] == nullptr) hasNoColIn.push_back(v->surfacePoint);
+    if (v->col_out_vertex[0] == nullptr) hasNoColOut.push_back(v->surfacePoint);
+  }
+  knitModel.showSurfacePoints("has no col in", hasNoColIn)->setEnabled(false);
+  knitModel.showSurfacePoints("has no col out", hasNoColOut)->setEnabled(false);
   
   //store matching information 
   findLineSegmentPairs();
@@ -94,8 +102,8 @@ void KnitGraph::buildGraph(){
   renderFinalGraph();
   // writeKnitGraphToTxtFile();
   
-  // //trace the short-rows
-  // traceShortRows();
+  //trace the short-rows
+  traceShortRows();
 }
 
 //Makes virtual vertices in the course direction
@@ -160,6 +168,7 @@ void KnitGraph::makeVirtualVerticesOnBorder(Face& f, bool isCourseDirection){
   // double area = n.norm(); // triangle area
   // Vector3 gradAlpha = ((alphaJ - alphaI) * e2 - (alphaK - alphaI) * e1) / (2.0 * area);
   // Vector3 gradBeta = ((betaJ - betaI) * e2 - (betaK - betaI) * e1) / (2.0 * area);
+
   
   if (isCourseDirection){//course direction
     //shift by small epsilon to account for floating point error
@@ -288,17 +297,14 @@ void KnitGraph::makeVirtualVerticesOnBorder(Face& f, bool isCourseDirection){
       }
     }
   }
-  
-  Eigen::Vector3d alpha {alphaI, alphaJ, alphaK}, beta {betaI, betaJ, betaK};
-  Eigen::Vector2d gradAlpha = knitModel.computeIntrinsicGrad(f, alpha);
-  Eigen::Vector2d gradBeta  = knitModel.computeIntrinsicGrad(f, beta);
-  double cross = gradAlpha(0) * gradBeta(1) - gradAlpha(1) * gradBeta(0);
-  if (cross < 0) {
-    for (KnitGraphVertex *v : faceKnitGraphVertices[f]) {
-      v->alpha_tag = -v->alpha_tag;
-      v->beta_tag = -v->beta_tag;
-    }
-  }
+
+  // Eigen::Vector3d alpha {alphaI, alphaJ, alphaK}, beta {betaI, betaJ, betaK};
+  // Eigen::Vector2d gradAlpha = knitModel.computeIntrinsicGrad(f, alpha);
+  // Eigen::Vector2d gradBeta  = knitModel.computeIntrinsicGrad(f, beta);
+  // double cross = gradAlpha(0) * gradBeta(1) - gradAlpha(1) * gradBeta(0);
+  // bool isFaceInverted = (cross < 0);
+  // double sign = (isFaceInverted) ? -1 : +1;
+
 }
 
 //make real vertices
@@ -431,14 +437,7 @@ void KnitGraph::makeFaceConnections(){
     
     // Non-owning reference to this face's vertices
     std::vector<KnitGraphVertex*> faceVertices = faceKnitGraphVertices[f];
-    
-    if (f.getIndex() == 47 || f.getIndex() == 1679) {
-      DEBUG_VAR(f);
-      for (auto v : faceVertices) {
-        DEBUG_VAR(v->beta_tag);
-      }
-    }
-    
+        
     std::vector<double> uniqueAlphas;
     std::vector<double> uniqueBetas;
     
@@ -452,6 +451,11 @@ void KnitGraph::makeFaceConnections(){
       }
     }
     
+    if (f.getIndex() == 2968) {
+      DEBUG_VAR(uniqueAlphas);
+      DEBUG_VAR(uniqueBetas);
+    }
+
     // ---- Connect along course (rows): for each ~equal alpha, order by beta and link neighbors ----
     for (double currAlphaVal : uniqueAlphas) {
       std::map<double, KnitGraphVertex*> currAlphaRow; // key: beta, val: vertex*
@@ -500,6 +504,7 @@ void KnitGraph::intrinsicMerge(){
   //ensure that all real vertices have connections 
   for (auto& up : allVertices) {
     KnitGraphVertex* v = up.get();
+    allPoints.push_back(v->surfacePoint);
     if (v->isAlphaVirtual || v->isBetaVirtual) continue;
     // ensure(v->row_in_vertex != nullptr && "intial real vertex doesn't have row_in set");
     // ensure(v->row_out_vertex != nullptr && "initial real vertex doesn't have row_out set");
@@ -510,11 +515,10 @@ void KnitGraph::intrinsicMerge(){
     if(v->col_in_vertex[0] == nullptr)  problemVertices.push_back(v->surfacePoint);
     if(v->col_out_vertex[0] == nullptr) problemVertices.push_back(v->surfacePoint);
     // TODO: populate v.surfacePoint!
-    allPoints.push_back(v->surfacePoint);
   }
   
   knitModel.showSurfacePoints("problem vertices", problemVertices);
-  knitModel.showSurfacePoints("all vertices before merge", allPoints);
+  knitModel.showSurfacePoints("all vertices before merge", allPoints)->setEnabled(false);
   
   //also ensure all the ordering is correct
   for (Face f : mesh.faces()) {
@@ -570,12 +574,6 @@ void KnitGraph::intrinsicMerge(){
       std::vector<KnitGraphVertex*> he1CourseVertices = halfedgeCourseVertices[e.halfedge()];
       std::vector<KnitGraphVertex*> he2CourseVertices = halfedgeCourseVertices[e.halfedge().twin()];
       
-      if (e.getIndex() == 3430) {
-        DEBUG_VAR(he1CourseVertices.size());
-        DEBUG_VAR(he2CourseVertices.size());
-        for (Face f : e.adjacentFaces())
-          DEBUG_VAR(f);
-      }
 
       //Matchings across regular edges
       std::vector<std::pair<int, int>> regularMatchings;
@@ -598,12 +596,6 @@ void KnitGraph::intrinsicMerge(){
           v2->row_in_vertex = v1;                   
         }
 
-        if (e.getIndex() == 3430) {
-          DEBUG_VAR(v1->row_in_vertex);
-          DEBUG_VAR(v2->row_in_vertex);
-          DEBUG_VAR(v1->row_out_vertex);
-          DEBUG_VAR(v2->row_out_vertex);
-        }
       }
     }
   }
@@ -653,7 +645,10 @@ void KnitGraph::intrinsicMerge(){
       KnitGraphVertex* walker = startVertex;
       ensure(walker->row_in_vertex != nullptr && "startVertex picked doesn't have a row_in_vertex");
       
+      // DEBUG_VAR(startEdgeOrder);
+
       while (true){
+
         
         if (walker->row_in_vertex == nullptr){
           
@@ -672,6 +667,8 @@ void KnitGraph::intrinsicMerge(){
           Edge edge = walker->halfedge->edge();
           int edgeOrder = round(courseSingularEdgesGlued[edge]);
           
+          // DEBUG_VAR(edgeOrder);
+
           if (edgeOrder == -startEdgeOrder){
             //It's a match! We're done 
             matchings[walker] = nullptr;
@@ -697,15 +694,11 @@ void KnitGraph::intrinsicMerge(){
             }
             
             KnitGraphVertex* connectTo;
-            DEBUG_VAR(edgeOrder);
-            DEBUG_VAR(startEdgeOrder);
             if (abs(edgeOrder) > startEdgeOrder) {
               // Go below
               connectTo = rightVertices[rightVertices.size()-1-indexAlongHalfedge];
             } else {
               // Go above (also happens if we looped to the starting edge)
-              DEBUG_VAR((int)leftVertices.size()-1-indexAlongHalfedge);
-              DEBUG_VAR(edge.getIndex());
               if ((int)leftVertices.size()-1-indexAlongHalfedge >= rightVertices.size()) {
                 knitModel.showEdges("debug", {mesh.edge(edge.getIndex())});
                 polyscope::show();
@@ -739,7 +732,7 @@ void KnitGraph::intrinsicMerge(){
       
       int i2 = he2Vertices.size()-1;
       for (int i1 = 0; i1 < he1Vertices.size(); i1++) {
-        if (!matchings.count(he1Vertices[i1])) {
+        if (!matchings.count(he1Vertices[i1])) { // i1 is unmatched
           while (matchings.count(he2Vertices[i2])) {
             i2--;
             if (i2 < 0) {
@@ -767,7 +760,7 @@ void KnitGraph::intrinsicMerge(){
       courseMatchings.emplace_back(std::make_pair(v1, v2)); 
     }
   }
-  knitModel.showSurfacePoints("course matchings", courseMatchingsPoints);
+  knitModel.showSurfacePoints("course matchings", courseMatchingsPoints)->setEnabled(false);
   //polyscope::registerPointCloud("course matchings", courseMatchingsLocations);
   
   
@@ -913,6 +906,8 @@ void KnitGraph::intrinsicMerge(){
       
       if (!v || v->isBetaVirtual) {
         v0->col_out_vertex[0] = nullptr;
+        // DEBUG_VAR(v0->id);
+        // DEBUG_VAR(v->id);
       } else {
         v0->col_out_vertex[0] = v;
         v->col_in_vertex[0]   = v0;
@@ -1219,14 +1214,6 @@ void KnitGraph::makeAdjustedVirtualVerticesOnBorder(Face& f, bool isCourseDirect
       adjustedFaceKnitGraphVertices[f].emplace_back(raw2);
     }
   }
-  
-  // // TODO
-  // if (dot(cross(gradAlpha, gradBeta), n) < 0) {
-  //   for (KnitGraphVertex *v : adjustedFaceKnitGraphVertices[f]) {
-  //     v->alpha_tag = -v->alpha_tag;
-  //     v->beta_tag = -v->beta_tag;
-  //   }
-  // }
 }
 
 void KnitGraph::makeAdjustedRealVertices(){
@@ -1267,61 +1254,73 @@ void KnitGraph::makeAdjustedRealVerticesOnInterior(Face& f){
       return try2(0,1) || try2(1,2) || try2(0,2);
     };
     
-    auto strictlyInside = [&](const Vector3& b)->bool {
-      return (b[0] > eps && b[1] > eps && b[2] > eps);
-    };
-    
-    auto setTagsOnFace = [&](KnitGraphVertex* v, Face f) {
-      Halfedge h0 = f.halfedge();
-      Halfedge h1 = h0.next();
-      Halfedge h2 = h1.next();
-      double aI = courseOneForm[h0.corner()];
-      double aJ = courseOneForm[h1.corner()];
-      double aK = courseOneForm[h2.corner()];
-      double bI = waleOneForm[h0.corner()];
-      double bJ = waleOneForm[h1.corner()];
-      double bK = waleOneForm[h2.corner()];
-      v->alpha_tag = v->baryCoords[0] * aI + v->baryCoords[1] * aJ + v->baryCoords[2] * aK;
-      v->beta_tag  = v->baryCoords[0] * bI + v->baryCoords[1] * bJ + v->baryCoords[2] * bK;
-    };
-    
-    
-    const auto& coursePairs = courseLineSegPairs[f];
-    const auto& walePairs   = waleLineSegPairs[f];
-    
-    for (auto cp : coursePairs) {
-      KnitGraphVertex *c0 = cp.first, *c1 = cp.second;
-      orientCourse(c0, c1); // beta increases
-      const Vector3 a0 = c0->baryCoords, a1 = c1->baryCoords;
-      
-      for (auto wp : walePairs) {
-        KnitGraphVertex *w0 = wp.first, *w1 = wp.second;
-        orientWale(w0, w1); // alpha increases
-        const Vector3 b0 = w0->baryCoords, b1 = w1->baryCoords;
-        
-        double u, v;
-        if (!solveUV(a0, a1, b0, b1, u, v)) continue;
-        if (u < -eps || u > 1 + eps || v < -eps || v > 1 + eps) continue;
-        
-        Vector3 bary = (1.0 - u) * a0 + u * a1;
-        double s = bary[0] + bary[1] + bary[2];
-        if (std::abs(s - 1.0) > 1e-9) bary = (1.0 / s) * bary;
-        
-        if (!strictlyInside(bary)) continue;
-        
-        auto nv = std::make_unique<KnitGraphVertex>();
-        KnitGraphVertex* raw = nv.get();
-        raw->baryCoords = bary;
-        raw->surfacePoint = SurfacePoint(f, raw->baryCoords);
-        raw->id         = vertexID++;
-        raw->halfedge   = f.halfedge(); // any halfedge on this face
-        setTagsOnFace(raw, f);
-        
-        adjustedFaceKnitGraphVertices[f].push_back(raw);
-        adjustedVertices.emplace_back(std::move(nv));
+  auto strictlyInside = [&](const Vector3& b)->bool {
+    return (b[0] > eps && b[1] > eps && b[2] > eps);
+  };
+  
+  auto setTagsOnFace = [&](KnitGraphVertex* v, Face f) {
+    Halfedge h0 = f.halfedge();
+    Halfedge h1 = h0.next();
+    Halfedge h2 = h1.next();
+    double aI = courseOneForm[h0.corner()];
+    double aJ = courseOneForm[h1.corner()];
+    double aK = courseOneForm[h2.corner()];
+    double bI = waleOneForm[h0.corner()];
+    double bJ = waleOneForm[h1.corner()];
+    double bK = waleOneForm[h2.corner()];
+    v->alpha_tag = v->baryCoords[0] * aI + v->baryCoords[1] * aJ + v->baryCoords[2] * aK;
+    v->beta_tag  = v->baryCoords[0] * bI + v->baryCoords[1] * bJ + v->baryCoords[2] * bK;
+
+    Eigen::Vector3d alpha {aI, aJ, aK}, beta {bI, bJ, bK};
+    Eigen::Vector2d gradAlpha = knitModel.computeIntrinsicGrad(f, alpha);
+    Eigen::Vector2d gradBeta  = knitModel.computeIntrinsicGrad(f, beta);
+    double cross = gradAlpha(0) * gradBeta(1) - gradAlpha(1) * gradBeta(0);
+    if (cross < 0) {
+      for (KnitGraphVertex *v : adjustedFaceKnitGraphVertices[f]) {
+        v->alpha_tag = -v->alpha_tag;
+        v->beta_tag = -v->beta_tag;
       }
     }
+  };
+  
+  
+  const auto& coursePairs = courseLineSegPairs[f];
+  const auto& walePairs   = waleLineSegPairs[f];
+  
+  for (auto cp : coursePairs) {
+    KnitGraphVertex *c0 = cp.first, *c1 = cp.second;
+    orientCourse(c0, c1); // beta increases
+    const Vector3 a0 = c0->baryCoords, a1 = c1->baryCoords;
+    
+    for (auto wp : walePairs) {
+      KnitGraphVertex *w0 = wp.first, *w1 = wp.second;
+      orientWale(w0, w1); // alpha increases
+      const Vector3 b0 = w0->baryCoords, b1 = w1->baryCoords;
+      
+      double u, v;
+      if (!solveUV(a0, a1, b0, b1, u, v)) continue;
+      if (u < -eps || u > 1 + eps || v < -eps || v > 1 + eps) continue;
+      
+      Vector3 bary = (1.0 - u) * a0 + u * a1;
+      double s = bary[0] + bary[1] + bary[2];
+      if (std::abs(s - 1.0) > 1e-9) bary = (1.0 / s) * bary;
+      
+      if (!strictlyInside(bary)) continue;
+      
+      auto nv = std::make_unique<KnitGraphVertex>();
+      KnitGraphVertex* raw = nv.get();
+      raw->baryCoords = bary;
+      raw->surfacePoint = SurfacePoint(f, raw->baryCoords);
+      raw->id         = vertexID++;
+      raw->halfedge   = f.halfedge(); // any halfedge on this face
+      setTagsOnFace(raw, f);
+      
+      adjustedFaceKnitGraphVertices[f].push_back(raw);
+      adjustedVertices.emplace_back(std::move(nv));
+    }
   }
+
+}
   
   
 //there has to be a better way of writing this
@@ -1972,53 +1971,54 @@ void KnitGraph::renderFinalGraph(){
   knitModel.showSurfacePointNetwork("Adjusted vertices knit graph", points, adj);
 }
 
-// //write knit graph to txt file 
-// // TODO
-// void KnitGraph::writeKnitGraphToTxtFile(const std::string& fileName){
+//write knit graph to txt file 
+// TODO
+void KnitGraph::writeKnitGraphToTxtFile(const std::string& fileName){
   
-//   std::ofstream file(fileName);
+  std::ofstream file(fileName);
+    
+  int i = 0;
+  for (auto &up : finalVertices){
+    KnitGraphVertex* v = up.get();
+    int id = v->id;
+    int row_in = v->row_in_vertex ? v->row_in_vertex->id : -1;
+    int row_out = v->row_out_vertex ? v->row_out_vertex->id : -1;
+    int col_in_0 = v->col_in_vertex[0] ? v->col_in_vertex[0]->id : -1;
+    int col_in_1 = v->col_in_vertex[1] ? v->col_in_vertex[1]->id : -1;
+    int col_out_0 = v->col_out_vertex[0] ? v->col_out_vertex[0]->id : -1;
+    int col_out_1 = v->col_out_vertex[1] ? v->col_out_vertex[1]->id : -1;
+    Vector3 pos = knitModel.getSurfacePointPositions(v->surfacePoint)[0];
+    file << id << " " << pos[0] << " " << pos[1] << " " << pos[2] << " " << row_in << " " << row_out << 
+    " " << col_in_0 << " " << col_in_1 << " " << col_out_0 << " " << col_out_1 << "\n";
+  }
   
+  // Write pairs of stitched vertices
+  // TODO: this is not populated for now
+  for (const auto &[v1,v2] : stitchedVertices)
+  file << "s " << v1 << " " << v2 << "\n";
   
-//   for (auto &up : finalVertices){
-//     KnitGraphVertex* v = up.get();
-//     int id = v->id;
-//     int row_in = v->row_in_vertex ? v->row_in_vertex->id : -1;
-//     int row_out = v->row_out_vertex ? v->row_out_vertex->id : -1;
-//     int col_in_0 = v->col_in_vertex[0] ? v->col_in_vertex[0]->id : -1;
-//     int col_in_1 = v->col_in_vertex[1] ? v->col_in_vertex[1]->id : -1;
-//     int col_out_0 = v->col_out_vertex[0] ? v->col_out_vertex[0]->id : -1;
-//     int col_out_1 = v->col_out_vertex[1] ? v->col_out_vertex[1]->id : -1;
-//     Vector3 pos = getKnitGraphPosition(v);
-//     file << id << " " << pos[0] << " " << pos[1] << " " << pos[2] << " " << row_in << " " << row_out << 
-//     " " << col_in_0 << " " << col_in_1 << " " << col_out_0 << " " << col_out_1 << "\n";
-//   }
-  
-//   // Write pairs of stitched vertices
-//   for (const auto &[v1,v2] : stitchedVertices)
-//   file << "s " << v1 << " " << v2 << "\n";
-  
-//   // file.close();
-//   std::cout << "wrote knit graph to txt file " << std::endl;
-// }
+  // file.close();
+  std::cout << "wrote knit graph to txt file " << std::endl;
+}
 
-// //trace the short rows in the graph to view helices
-// void KnitGraph::traceShortRows(){   
-//   int ctr = 0;
-//   for (auto &up : finalVertices){
-//     KnitGraphVertex* v = up.get();
-//     if (v->row_in_vertex == nullptr){
-//       std::vector<Vector3> pos;
-//       std::vector<std::array<int, 2>> edges;
-//       KnitGraphVertex* walker = v;
-//       while(walker->row_out_vertex != nullptr){
-//         pos.push_back(getKnitGraphPosition(walker));
-//         walker = walker->row_out_vertex;
-//       }
-//       for (int i = 0; i < (int)pos.size() - 1; i++){
-//         edges.push_back(std::array{i, i + 1});
-//       }
-//       polyscope::registerCurveNetwork("traced short row " + std::to_string(ctr), pos, edges)->setRadius(0.00125);
-//       ctr++;
-//     }
-//   }
-// }
+//trace the short rows in the graph to view helices
+void KnitGraph::traceShortRows(){   
+  int ctr = 0;
+  for (auto &up : finalVertices){
+    KnitGraphVertex* v = up.get();
+    if (v->row_in_vertex == nullptr){
+      std::vector<SurfacePoint> points;
+      std::vector<pair<int,int>> adj;
+      KnitGraphVertex* walker = v;
+      while(walker != nullptr){
+        points.push_back(walker->surfacePoint);
+        walker = walker->row_out_vertex;
+      }
+      for (int i = 0; i < (int)points.size() - 1; i++){
+        adj.push_back({i, i+1});
+      }
+      knitModel.showSurfacePointNetwork("traced short row " + std::to_string(ctr), points, adj)->setRadius(0.00125);
+      ctr++;
+    }
+  }
+}

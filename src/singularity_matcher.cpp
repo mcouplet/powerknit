@@ -40,6 +40,7 @@ vector<pair<SurfacePoint,SurfacePoint>> SingularityMatcher::match(const vector<S
       double tDiff = abs(timeFunction(p2) - timeFunction(p1));
       double aDiff = mod(posSingAngles[i] - negSingAngles[j], 2*M_PI);
       cost[i][j] = (1-angleWeight) * tDiff + angleWeight * aDiff/(2*M_PI);
+      ensure(cost[i][j] >= 0);
       // DEBUG_PRINT("({},{}): {}", i, j, aDiff);
     }
   }
@@ -199,9 +200,9 @@ CornerData<double> SingularityMatcher::computeAngleParam() {
 
   Eigen::VectorXd omega = sol.head(nHE);
   double lambda = sol(nHE);
-  DEBUG_VAR((A * omega).norm()); // harmonicity residual, should be ~0
-  DEBUG_VAR(c.dot(omega));       // realized holonomy, should be γ
-  DEBUG_VAR(lambda);             // should be ~0 when the constraint is compatible
+  // DEBUG_VAR((A * omega).norm()); // harmonicity residual, should be ~0
+  // DEBUG_VAR(c.dot(omega));       // realized holonomy, should be γ
+  // DEBUG_VAR(lambda);             // should be ~0 when the constraint is compatible
 
   // Pack the solved one-form into half-edge data.
   HalfedgeData<double> sigma(mesh);
@@ -244,7 +245,7 @@ CornerData<double> SingularityMatcher::computeAngleParam() {
 // O(n^3) algorithm for weighted bipartite matching
 template<class T> T bipartiteMatching(vector<vector<T>> cost, vector<int> &l, vector<int> &r) {
   int n = cost.size();
-  vector<T> u(n,DBL_MAX), v(u), dist(n); // INF must be >= all cost[i][j]
+  vector<T> u(n,DBL_MAX/2), v(u), dist(n); // INF must be >= all cost[i][j]
   // Construct dual feasible solution
   for (int i = 0; i < n; i++) for (int j = 0; j < n; j++) MI(u[i], cost[i][j]);
   for (int i = 0; i < n; i++) for (int j = 0; j < n; j++) MI(v[j], cost[i][j] - u[i]);
@@ -260,6 +261,7 @@ template<class T> T bipartiteMatching(vector<vector<T>> cost, vector<int> &l, ve
       int i = r[j];
       if (i == -1) break;
       for (int k = 0; k < n; k++) { // Relax neighbors
+        if (seen[k]) continue; // never relax a finalized column (avoids par cycles under FP)
         T new_dist = dist[j] + cost[i][k] - u[i] - v[k];
         if (dist[k] > new_dist)
         dist[k] = new_dist, par[k] = j;

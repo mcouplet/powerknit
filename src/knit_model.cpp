@@ -584,7 +584,7 @@ void KnitModel::registerPSMesh(string name) {
       halfedgePerm.push_back(he.getIndex());
     }
   }
-  pPSMesh->setHalfedgePermutation(halfedgePerm);
+  pPSMesh->setHalfedgePermutation(halfedgePerm, globalMesh.nHalfedges());
 }
 
 KnitSubModel::KnitSubModel(const KnitModelInterface& _parent, const vector<Face>& faces, const vector<vector<Corner>>& cornersToRemap) : id(nSubModels++), parent(_parent) {
