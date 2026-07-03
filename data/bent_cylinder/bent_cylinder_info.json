@@ -1,0 +1,11 @@
+{
+    "model_path": "bent_cylinder.obj",
+    "vertex_mappings": "bent_cylinder_vertex_mappings.txt",
+    "boundaries":{
+        "course":{
+            "useBoundaryLoops": true, 
+            "startVertices": [3],
+            "endVertices": [147]
+        }
+    }
+}

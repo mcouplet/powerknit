@@ -1,0 +1,11 @@
+{
+    "model_path": "pants.obj",
+    "vertex_mappings": "pants_vertex_mappings.txt",
+    "boundaries":{
+        "course":{
+            "useBoundaryLoops": true,
+            "startVertices" : [0, 613],
+            "endVertices" : [57]
+        }
+    }
+}

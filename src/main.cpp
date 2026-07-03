@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
   // Set period if not provided
   if (!period) {
     knitModel.geom().requireShapeLengthScale();
-    period = 0.01 * knitModel.geom().shapeLengthScale;
+    period = 0.02 * knitModel.geom().shapeLengthScale;
   }
 
   DEBUG_VAR(*period);
