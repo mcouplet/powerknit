@@ -20,10 +20,9 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
 
   // Put singularities on edges and make sure there's only 1 per edge
   EdgeData<int> singIndex(mesh, 0); // on parent mesh. 0, +1 or -1
-  EdgeData<int> singOrderGlobal(mesh, 0); // on parent mesh
   vector<vector<tuple<Halfedge, Halfedge, double>>> singHalfedgesPerCell(nCells); // half-edge points UP in terms of time function. Pruned and ordered. We also attach the time value
+  vector<tuple<Halfedge,Halfedge,double>> allSingHalfedges; // all singular pairs on parent mesh, with time values
   vector<EdgeData<int>> singOrderPerCell; // 0, +i or -i where i is the order from 1 to n
-  int singCount = 0;
   for (auto& cell : morseDecomp.cells) {
 
     auto& pairedSings = pairedSingsPerCell[cell.getIndex()]; // shorthand
@@ -51,6 +50,9 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
       if (cell.timeFunction(he1.tipVertex()) < cell.timeFunction(he1.tailVertex())) he1 = he1.twin();
       if (cell.timeFunction(he2.tipVertex()) < cell.timeFunction(he2.tailVertex())) he2 = he2.twin();
       singHalfedges.push_back({he1, he2, t1});
+      Halfedge phe1 = cell.model().transferToParent(he1);
+      Halfedge phe2 = cell.model().transferToParent(he2);
+      allSingHalfedges.push_back({phe1, phe2, t1});
       prunedPairs.push_back({s1, s2});
       iPair++;
     }
@@ -75,16 +77,26 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
       Edge pe = cell.model().transferToParent(e); // parent edge
       if (order > 0) singIndex[pe] = +1;
       if (order < 0) singIndex[pe] = -1;
-      singOrderGlobal[pe] = order + sgn(order)*singCount;
     }
+  }
 
-    singCount += prunedPairs.size();
+  // Sort singular pairs by time value and determine global ordering based on that
+  std::sort(allSingHalfedges.begin(), allSingHalfedges.end(),
+    [](const auto& a, const auto& b) {
+        return std::get<2>(a) < std::get<2>(b);
+  });
+  EdgeData<int> singOrderGlobal(mesh, 0);
+  for (int i = 0; i < allSingHalfedges.size(); i++) {
+    auto [he1,he2,t] = allSingHalfedges[i];
+    singOrderGlobal[he1.edge()] = +(i+1);
+    singOrderGlobal[he2.edge()] = -(i+1);
   }
 
   EdgeData<double> singIndexViz(mesh, 0);
   for (Edge e : mesh.edges())
     singIndexViz[e] = singOrderGlobal[e];
   knitModel.addEdgeScalarQuantity("course singOrderGlobal", singIndexViz);
+
 
   // OSQP (Operator Splitting Quadratic Program) solver.
   Solver solver(knitModel); // our wrapper
@@ -249,7 +261,7 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
   CornerData<double> stripeValuesOffset = stripeValues-period/4;
 
   auto [points, adj] = traceStripes(stripeValuesOffset, period); // offset to match knit graph
-  knitModel.showSurfacePointNetwork("course stripes", points, adj)->setRadius(1e-3)->setColor({0.0, 1.0, 0.0});
+  knitModel.showSurfacePointNetwork("course stripes", points, adj)->setRadius(1e-3)->setColor({0.0, 1.0, 0.0})->setEnabled(false);
 
   return {stripeValues, singOrderGlobal};
 }
@@ -269,7 +281,24 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeWale(std::vector<Surf
         if (imin == -1 || p.faceCoords[i] < p.faceCoords[imin])
           imin = i;
     }
-    ensure(imin != -1); // none of the edges are aligned: could be caused by a sliver triangle
+
+    if (imin == -1) {
+      // none of the edges are aligned: could be caused by a sliver triangle
+      // in this case, just pick the most aligned one
+      double minAngle = M_PI;
+      for (int i = 0; i < 3; i++, he=he.next()) {
+        double angle = timeFunction.angleWithGuidingField[KnitDirection::Wale][he];
+        if (angle < minAngle) {
+          minAngle = angle, imin = i;
+        }
+      }
+      // FaceData<double> misalignedFaces(mesh);
+      // misalignedFaces[he.face()] = true;
+      // knitModel.addFaceScalarQuantity("misalignedFaces", misalignedFaces);
+      // polyscope::show();
+    }
+
+    ensure(imin != -1);
     he = p.face.halfedge().next();
     for (int j = 0; j < imin; j++) he = he.next();
     double t1 = p.faceCoords[(imin+1)%3], t2 = p.faceCoords[(imin+2)%3];
@@ -409,7 +438,7 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeWale(std::vector<Surf
   CornerData<double> stripeValuesOffset = stripeValues-period/4;
 
   auto [points, adj] = traceStripes(stripeValuesOffset, period);
-  knitModel.showSurfacePointNetwork("wale stripes", points, adj)->setRadius(1e-3)->setColor({1.0, 0.5, 0.0});
+  knitModel.showSurfacePointNetwork("wale stripes", points, adj)->setRadius(1e-3)->setColor({1.0, 0.5, 0.0})->setEnabled(false);
 
   return {stripeValues, singIndex};
 }

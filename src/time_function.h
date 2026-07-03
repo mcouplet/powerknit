@@ -1,8 +1,9 @@
 #pragma once
 
 #include "knit_model.h"
+#include "geometrycentral/surface/heat_method_distance.h"
 
-enum class KnitDirection { Course, Wale }; // we might want to put this in a specific shared header, under a namespace
+enum KnitDirection { Course, Wale }; // we might want to put this in a specific shared header, under a namespace
 
 // This class will handle everything related to the time function:
 // its gradient and rotated gradient, saddle loops, level sets, curl measures, ...
@@ -21,6 +22,9 @@ public:
   VertexData<double> posCourseCurl, negCourseCurl, posWaleCurl, negWaleCurl; // the positive and negative parts
   VertexData<bool> isSaddle; // better than a list because it remains valid through compresses
   EdgeData<bool> isSeparatrix; // populated by cutSaddleLoops
+  std::array<HalfedgeData<double>,2> angleWithGuidingField; // angle (in [0,π/2]) between an edge and the course/wale guiding field
+
+  std::unique_ptr<HeatMethodDistanceSolver> heatSolver = nullptr; // for masking. Null for sub-models
 
   void morseDecompose();
 
@@ -35,10 +39,7 @@ public:
   // maxAngle should be in [0,π/2]. Function is always false if maxAngle=0, always true if = π/2
   bool isAligned(Halfedge he, KnitDirection dir, double maxAngle=M_PI/4) const {
     ensure(between(maxAngle, {0, M_PI/2}));
-    const FaceData<Vector2>& guide = (dir == KnitDirection::Course) ? courseGuide : waleGuide;
-    Vector2 grad = guide[he.face()].normalize();
-    Vector2 heVec = knitModel.geom().halfedgeVectorsInFace[he].normalize();
-    return (abs(dot(grad, heVec)) >= cos(maxAngle));
+    return angleWithGuidingField[dir][he] < maxAngle;
   }
   bool isAligned(Edge e, KnitDirection dir, double maxAngle=M_PI/4) const {
     return isAligned(e.halfedge(), dir, maxAngle);
@@ -54,6 +55,8 @@ public:
   double operator()(Vertex v) const { return timeFunction[v]; }
   std::pair<double,double> operator()(Halfedge he) const { return {timeFunction[he.tailVertex()], timeFunction[he.tipVertex()]}; }
 
+  void maskCurl(std::vector<Vertex>& sources, double r, KnitDirection d);
+
 private:
 
   // I think these should be more generic functions, e.g. computeHarmonicsInterp, computeGrad
@@ -63,5 +66,6 @@ private:
   void splitMeasure(const VertexData<double> measure, VertexData<double>& posMeasure, VertexData<double>& negMeasure);
   void findSaddles();
   void cutSaddleLoops(KnitModel& fullKnitModel); // requires a full model so that we can edit the global mesh!
+  void computeAngleWithGuidingField();
 
 };

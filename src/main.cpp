@@ -20,7 +20,7 @@ namespace fs = std::filesystem;
 int main(int argc, char** argv) {
 
   // Setup command-line interface with CLI11
-  CLI::App app{"power-knitting"};
+  CLI::App app{"powerknit"};
   argv = app.ensure_utf8(argv);
   fs::path inPath;
   fs::path knitGraphPath;
@@ -62,6 +62,9 @@ int main(int argc, char** argv) {
   knitModel.getHomologyGenerators(); // just to compute them
   knitModel.showHomologyGenerators();
 
+  knitModel.addHalfedgeScalarQuantity("course alignment", timeFunction.angleWithGuidingField[KnitDirection::Course]);
+  knitModel.addHalfedgeScalarQuantity("wale alignment", timeFunction.angleWithGuidingField[KnitDirection::Wale]);
+
   // TODO: we might want to re-compute a harmonic time function on the cut mesh,
   // with constraints on the saddle loops time values.
 
@@ -78,6 +81,10 @@ int main(int argc, char** argv) {
 
   double totalPosCourseMass = quantizer.totalMass(timeFunction.posCourseCurl);
   double totalNegCourseMass = quantizer.totalMass(timeFunction.negCourseCurl);
+  DEBUG_VAR(totalPosCourseMass);
+  DEBUG_VAR(totalNegCourseMass);
+
+  // polyscope::show();
 
   for (auto& cell : morseDecomp.cells) {
 
@@ -89,6 +96,9 @@ int main(int argc, char** argv) {
     cell.model().addMeasure("neg course curl", cell.timeFunction.negCourseCurl)->setColorMap("blues");
     cell.model().addMeasure("pos wale curl", cell.timeFunction.posWaleCurl)->setColorMap("reds");
     cell.model().addMeasure("neg wale curl", cell.timeFunction.negWaleCurl)->setColorMap("blues");
+
+    // polyscope::show();
+
 
     // Quantize to singularities
     Quantizer cellQuantizer(cell.model());
@@ -108,6 +118,7 @@ int main(int argc, char** argv) {
     cell.timeFunction.sortByTime(negCourseSings);
     cell.model().showSurfacePoints("pos course sings", posCourseSings)->setPointColor({1,0,0})->setEnabled(false);
     cell.model().showSurfacePoints("neg course sings", negCourseSings)->setPointColor({0,0,1})->setEnabled(false);
+
 
     // Match and align singularities
     SingularityMatcher singularityMatcher(cell.timeFunction);
@@ -153,11 +164,12 @@ int main(int argc, char** argv) {
   auto [courseStripeValues, courseEdgeIndex] = foliation.computeCourse(pairedCourseSingsPerCell, *period);
   auto [waleStripeValues, waleEdgeIndex] = foliation.computeWale(posWaleSings, negWaleSings, *period);
 
-  polyscope::show();
+  // polyscope::show();
 
   // knit graph module (whole model)
   KnitGraph knitGraph(knitModel, *period, *period, courseStripeValues, courseEdgeIndex, waleStripeValues, waleEdgeIndex);
   knitGraph.buildGraph();
+  knitGraph.writeKnitGraphToTxtFile(knitGraphPath);
   
   polyscope::show();
 

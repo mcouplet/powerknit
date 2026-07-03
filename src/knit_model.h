@@ -109,6 +109,10 @@ public:
 
     // template <class T, class BX, class BY> SurfaceFaceTangentVectorQuantity* addFaceTangentVectorQuantity(std::string name, const T& vectors, const BX& basisX, const BY& basisY, int nSym = 1, VectorType vectorType = VectorType::STANDARD); 
 
+  // SurfacePoint is on *glued* mesh, and must be of Edge or Face type
+  // This is the ONLY function that gives us access to the 3D space - we need it to write the knit graph to file
+  std::vector<Vector3> getSurfacePointPositions(const SurfacePoint& point) const;
+
 private:
 
   // Glued mesh and geometry
@@ -166,9 +170,6 @@ private:
     }
     return polyscope::registerCurveNetwork(name, positions, edgeIndices);
   }
-
-  // SurfacePoint is on *glued* mesh, and must be of Edge or Face type
-  std::vector<Vector3> getSurfacePointPositions(const SurfacePoint& point) const;
 };
 
 // A cylindrical sub-region - has its own glued mesh, maps back to parent

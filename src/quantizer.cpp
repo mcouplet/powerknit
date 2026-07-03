@@ -151,6 +151,7 @@ vector<SurfacePoint> Quantizer::quantizeMeasure(VertexData<double>& measure, int
       int tid = omp_get_thread_num();
       SurfacePoint& site = sites[iSite];
       logMaps[iSite] = vSolvers[tid].computeLogMap(site, LogMapStrategy::AffineLocal);
+      // logMaps[iSite] = vSolvers[tid].computeLogMap(site);
       cellIndicators[iSite] = powerKernels[iSite] / sumPowerKernels;
 
       
