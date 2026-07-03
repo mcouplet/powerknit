@@ -1,4 +1,4 @@
-# PowerKnit -- Surface Power Diagrams for Knit Singularity Placement
+# PowerKnit - Surface Power Diagrams for Knit Singularity Placement
 
 Computes a knit graph (course/wale stripe pattern with matched singularities) from
 a sewing-pattern surface mesh. Given an input mesh together with seam information and
@@ -142,3 +142,9 @@ If you use PowerKnit in an academic publication, please cite:
   url       = {https://doi.org/10.1145/3811401}
 }
 ```
+
+## License
+
+PowerKnit is released under the [PolyForm Noncommercial License 1.0.0](LICENSE.md).
+You may use, modify, and share it freely for noncommercial purposes; any commercial use
+requires a separate license from the authors.
