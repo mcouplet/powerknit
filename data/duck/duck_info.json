@@ -1,0 +1,11 @@
+{
+    "model_path": "duck.obj",
+    "vertex_mappings": "duck_vertex_mappings.txt",
+    "boundaries":{
+        "course":{
+            "useBoundaryLoops": true, 
+            "endVertices": [8214],
+            "startVertices": [8374]
+        }
+    }
+}

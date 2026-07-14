@@ -21,22 +21,21 @@ KnitModel::KnitModel(const fs::path& inPath) {
 
 			nlohmann::json jsonData = nlohmann::json::parse(ifstream(inPath));
 
-			// Resolve model and vertex mappings paths
+      // Resolve model path and read mesh and geometry
 			fs::path modelPath = jsonData["model_path"].get<string>();
 			if (!fs::exists(modelPath)) modelPath = inPath.parent_path() / modelPath; // also try path relative to JSON file
 			ensure(fs::exists(modelPath));
-			fs::path vertexMappingsPath = jsonData["vertex_mappings"].get<string>();
-			if (!fs::exists(vertexMappingsPath)) vertexMappingsPath = inPath.parent_path() / vertexMappingsPath; // also try path relative to JSON file
-			ensure(fs::exists(vertexMappingsPath));
-
-			// Read mesh and geometry
 			tie(pGlobalMesh, pGlobalGeom) = readManifoldSurfaceMesh(modelPath);      
 
-			// Read vertex mappings
-			vector<pair<int,int>> vertexMappingIndices = readVertexMappings(vertexMappingsPath);
-			for (auto &[i1, i2] : vertexMappingIndices)
-					vertexMappings.push_back({pGlobalMesh->vertex(i1), pGlobalMesh->vertex(i2)});
-			// I don't think we still need the edgeMappingsPairs, but we'll see.
+			// Resolve vertex mappings path, if any, and read them
+      if (jsonData.contains("vertex_mappings")) {
+        fs::path vertexMappingsPath = jsonData["vertex_mappings"].get<string>();
+        if (!fs::exists(vertexMappingsPath)) vertexMappingsPath = inPath.parent_path() / vertexMappingsPath; // also try path relative to JSON file
+        ensure(fs::exists(vertexMappingsPath));
+        vector<pair<int,int>> vertexMappingIndices = readVertexMappings(vertexMappingsPath);
+        for (auto &[i1, i2] : vertexMappingIndices)
+            vertexMappings.push_back({pGlobalMesh->vertex(i1), pGlobalMesh->vertex(i2)});
+      }
 
 			// Register surface mesh in polyscope
       registerPSMesh("mesh");
@@ -51,11 +50,13 @@ KnitModel::KnitModel(const fs::path& inPath) {
       // Parse boundary conditions
       for (int vi : jsonData["boundaries"]["course"]["startVertices"]) {
         Vertex v = vertexGlobalToGlued[pGlobalMesh->vertex(vi)];
+        ensure(v.isBoundary());
         BoundaryLoop bLoop = v.halfedge().twin().face().asBoundaryLoop();
         this->courseStartLoops.push_back(bLoop);
       }
       for (int vi : jsonData["boundaries"]["course"]["endVertices"]) {
         Vertex v = vertexGlobalToGlued[pGlobalMesh->vertex(vi)];
+        ensure(v.isBoundary());
         BoundaryLoop bLoop = v.halfedge().twin().face().asBoundaryLoop();
         this->courseEndLoops.push_back(bLoop);
       }

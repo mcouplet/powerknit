@@ -25,12 +25,14 @@ int main(int argc, char** argv) {
   fs::path inPath;
   fs::path knitGraphPath;
   optional<double> period;
+  double relPeriod = 1;
   optional<int> targetCourseSings, targetPosWaleSings, targetNegWaleSings;
   bool verbose = false;
   bool nogui = false;
   app.add_option("inFileName", inPath, "Input mesh and metadata as .json or .obj.")->required()->check(CLI::ExistingFile);
   app.add_option("-o,--output", knitGraphPath, "Output knit graph file")->default_val("knitgraph.txt");
   app.add_option("-p,--period", period, "Period for the stripe pattern; default is 0.01 * shape length scale.");
+  app.add_option("--rel-period", relPeriod, "Relative period multiplier.");
   app.add_option("--n-course", targetCourseSings, "Target number of course singularity pairs; default is computed from curl signal.");
   app.add_option("--n-pos-wale", targetPosWaleSings, "Target number of positive wale singularities; default is computed from curl signal.");
   app.add_option("--n-neg-wale", targetNegWaleSings, "Target number of negative wale singularities; default is computed from curl signal.");
@@ -49,8 +51,9 @@ int main(int argc, char** argv) {
   // Set period if not provided
   if (!period) {
     knitModel.geom().requireShapeLengthScale();
-    period = 0.01 * knitModel.geom().shapeLengthScale;
+    period = 0.02 * knitModel.geom().shapeLengthScale;
   }
+  *period *= relPeriod;
 
   DEBUG_VAR(*period);
   
@@ -169,6 +172,7 @@ int main(int argc, char** argv) {
   // knit graph module (whole model)
   KnitGraph knitGraph(knitModel, *period, *period, courseStripeValues, courseEdgeIndex, waleStripeValues, waleEdgeIndex);
   knitGraph.buildGraph();
+  knitGraph.traceShortRows();
   knitGraph.writeKnitGraphToTxtFile(knitGraphPath);
   
   polyscope::show();

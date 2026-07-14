@@ -254,8 +254,16 @@ void TimeFunction::computeCurl(const FaceData<Vector2>& field, VertexData<double
   curl = VertexData<double>(mesh, 0.0);
   for (Halfedge he : mesh.interiorHalfedges()) {
     Vertex v = he.next().tipVertex();
-    if (!v.isBoundary()) // aren't we ignoring curl by doing this?
+    // if (!v.isBoundary()) // aren't we ignoring curl by doing this?
       curl[v] += (1./(2*geom.vertexDualAreas[v])) * dot(field[he.face()], geom.halfedgeVectorsInFace[he]);
+  }
+  // Also add contributions of boundary edges to boundary vertices
+  // TODO: double check this with Ed!
+  for (Halfedge heExt : mesh.exteriorHalfedges()) {
+    Halfedge he = heExt.twin();
+    Vertex v1 = he.tailVertex(), v2 = he.tipVertex();
+    curl[v1] += (1./(2*geom.vertexDualAreas[v1])) * dot(field[he.face()], geom.halfedgeVectorsInFace[he]);
+    curl[v2] += (1./(2*geom.vertexDualAreas[v2])) * dot(field[he.face()], geom.halfedgeVectorsInFace[he]);
   }
 }
 
