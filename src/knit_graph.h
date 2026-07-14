@@ -230,9 +230,6 @@ class KnitGraph{
   //render the final graph 
   void renderFinalGraph();
   
-  //trace short-rows in the graph
-  void traceShortRows();
-  
   
   
   
@@ -258,9 +255,11 @@ class KnitGraph{
     //build the knit graph
     void buildGraph();
     
-    // TODO 
     //write knit graph to txt file
     void writeKnitGraphToTxtFile(const std::string& fileName = "model.txt");
-    
+
+    //trace short-rows in the graph
+    void traceShortRows();
+
 };
   

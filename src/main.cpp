@@ -169,6 +169,7 @@ int main(int argc, char** argv) {
   // knit graph module (whole model)
   KnitGraph knitGraph(knitModel, *period, *period, courseStripeValues, courseEdgeIndex, waleStripeValues, waleEdgeIndex);
   knitGraph.buildGraph();
+  knitGraph.traceShortRows();
   knitGraph.writeKnitGraphToTxtFile(knitGraphPath);
   
   polyscope::show();

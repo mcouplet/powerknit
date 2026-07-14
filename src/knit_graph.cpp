@@ -101,9 +101,6 @@ void KnitGraph::buildGraph(){
   buildFinalVerticesFromAdjusted();
   renderFinalGraph();
   // writeKnitGraphToTxtFile();
-  
-  //trace the short-rows
-  traceShortRows();
 }
 
 //Makes virtual vertices in the course direction
@@ -2002,23 +1999,27 @@ void KnitGraph::writeKnitGraphToTxtFile(const std::string& fileName){
 }
 
 //trace the short rows in the graph to view helices
-void KnitGraph::traceShortRows(){   
-  int ctr = 0;
-  for (auto &up : finalVertices){
+void KnitGraph::traceShortRows(){
+
+  vector<SurfacePoint> points;
+  vector<pair<int,int>> adj;
+  vector<array<double,3>> colors;
+  for (auto &up : finalVertices) {
     KnitGraphVertex* v = up.get();
-    if (v->row_in_vertex == nullptr){
-      std::vector<SurfacePoint> points;
-      std::vector<pair<int,int>> adj;
+    if (v->row_in_vertex == nullptr) {
       KnitGraphVertex* walker = v;
-      while(walker != nullptr){
-        points.push_back(walker->surfacePoint);
+      vector<SurfacePoint> thisPoints; // points for current short row
+      while (walker != nullptr) {
+        thisPoints.push_back(walker->surfacePoint);
         walker = walker->row_out_vertex;
       }
-      for (int i = 0; i < (int)points.size() - 1; i++){
-        adj.push_back({i, i+1});
+      array<double,3> thisColor {polyscope::randomUnit(), polyscope::randomUnit(), polyscope::randomUnit()};
+      for (int i = 0; i < (int)thisPoints.size() - 1; i++) {
+        adj.push_back({points.size()+i, points.size()+i+1});
+        colors.push_back(thisColor);
       }
-      knitModel.showSurfacePointNetwork("traced short row " + std::to_string(ctr), points, adj)->setRadius(0.00125);
-      ctr++;
+      points += thisPoints; // append to global list of points
     }
   }
+  knitModel.showSurfacePointNetwork("short rows", points, adj)->setRadius(0.00125)->addEdgeColorQuantity("per-row color", colors)->setEnabled(true);
 }
