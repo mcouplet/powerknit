@@ -44,26 +44,27 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
   computeCurl(courseGuide, courseCurl);
   computeCurl(waleGuide, waleCurl);
 
-  // // Cap curl measure to avoid high concentration of singularities
-  // // Don't do capping if you're doing user editing with boosting, doesn't really make sense
-  // // TODO: not quite sure of the formula here, let's disable for now
-  // for (Vertex v : knitModel.mesh().vertices()) {
-  //   courseCurl[v] = fmin(courseCurl[v], +coursePeriod * (3*knitModel.geom().vertexDualAreas[v]));
-  //   courseCurl[v] = fmax(courseCurl[v], -coursePeriod * (3*knitModel.geom().vertexDualAreas[v]));
-  //   waleCurl[v] = fmin(waleCurl[v], +walePeriod * (3*knitModel.geom().vertexDualAreas[v]));
-  //   waleCurl[v] = fmax(waleCurl[v], -walePeriod * (3*knitModel.geom().vertexDualAreas[v]));
-  // }
+  // Cap curl measure to avoid high concentration of singularities
+  // Don't do capping if you're doing user editing with boosting, doesn't really make sense
+  // TODO: not quite sure of the formula here, let's disable for now
+  for (Vertex v : knitModel.mesh().vertices()) {
+    courseCurl[v] = fmin(courseCurl[v], +1.0/coursePeriod);
+    courseCurl[v] = fmax(courseCurl[v], -1.0/coursePeriod);
+    waleCurl[v] = fmin(waleCurl[v], +1.0/walePeriod);
+    waleCurl[v] = fmax(waleCurl[v], -1.0/walePeriod);
+  }
 
   // Mask curl measures around saddles
   vector<Vertex> saddles;
   for (Vertex v : knitModel.mesh().vertices())
     if (isSaddle[v]) saddles.push_back(v);
-  maskCurl(saddles, coursePeriod, KnitDirection::Course);
-  maskCurl(saddles, walePeriod, KnitDirection::Wale);
+  maskCurl(saddles, 3*coursePeriod, KnitDirection::Course);
+  maskCurl(saddles, 3*walePeriod, KnitDirection::Wale);
   
   knitModel.addVertexScalarQuantity("course curl", courseCurl, polyscope::DataType::SYMMETRIC);
   knitModel.addVertexScalarQuantity("wale curl", waleCurl, polyscope::DataType::SYMMETRIC);
 
+  // polyscope::show();
 
   // cutMesh();
 }
