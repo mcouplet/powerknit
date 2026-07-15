@@ -104,6 +104,8 @@ int main(int argc, char** argv) {
 
     // polyscope::show();
 
+    vector<SurfacePoint> allCourseSings; // for masking later on
+
     for (auto& cell : morseDecomp.cells) {
 
       // cell.timeFunction.posCourseCurl /= 2;
@@ -157,20 +159,23 @@ int main(int argc, char** argv) {
       //   SurfacePoint sp1 = cell.model().transferToParent(singPair.first), sp2 = cell.model().transferToParent(singPair.second);
       // }
 
-      pairedCourseSingsPerCell[cell.getIndex()] = matchedSings;
+      pairedCourseSingsPerCell[cell.getIndex()] = matchedSings; // not used?
 
-      // // Transfer back to parent mesh
-      // for (auto &[s1,s2] : matchedSings) {
-      //   SurfacePoint s1p = cell.model().transferToParent(s1);
-      //   SurfacePoint s2p = cell.model().transferToParent(s2);
-      //   // pairedCourseSingsPerCell[cell.getIndex()].push_back({s1p, s2p});
-      // }
+      // Append new sings to the global list
+      for (auto &[s1,s2] : matchedSings) {
+        allCourseSings.push_back(cell.model().transferToParent(s1));
+        allCourseSings.push_back(cell.model().transferToParent(s2));
+      }
     }
 
     // polyscope::show();
 
     // The wale part is done on the whole model
-    // Mask wale curl
+    // First, mask wale curl around course singularities to avoid collisions in the knit graph
+    timeFunction.maskCurl(allCourseSings, *period, KnitDirection::Wale);
+    knitModel.addVertexScalarQuantity("wale curl (masked)", timeFunction.waleCurl, polyscope::DataType::SYMMETRIC);
+
+
     vector<SurfacePoint> posWaleSings, negWaleSings;
     if (targetPosWaleSings) posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *targetPosWaleSings);
     else                    posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *period);

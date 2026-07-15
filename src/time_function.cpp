@@ -64,9 +64,6 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
   knitModel.addVertexScalarQuantity("course curl", courseCurl, polyscope::DataType::SYMMETRIC);
   knitModel.addVertexScalarQuantity("wale curl", waleCurl, polyscope::DataType::SYMMETRIC);
 
-  // Split them into positive and negative
-  splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
-  splitMeasure(waleCurl,   posWaleCurl,   negWaleCurl);
 
   // cutMesh();
 }
@@ -324,20 +321,6 @@ void TimeFunction::cutSaddleLoops(KnitModel& fullKnitModel) {
     isSeparatrix[e] = true;
   
   fullKnitModel.showSeparatrices()->setRadius(1e-3)->setEnabled(false);
-}
-
-void TimeFunction::maskCurl(vector<Vertex>& sources, double r, KnitDirection d) {
-  if (sources.empty()) return; // heatSolver does garbage in that case
-  VertexData<double> dist = heatSolver->computeDistance(sources);
-  VertexData<double>& curlMeasure = (d == KnitDirection::Course) ?courseCurl : waleCurl;
-  for (Vertex v : knitModel.mesh().vertices())
-    curlMeasure[v] *= (dist[v] > r);
-  
-  // // Re-split the measure into positive and negative
-  // if (d == KnitDirection::Course)
-  //   splitMeasure(curlMeasure, posCourseCurl, negCourseCurl);
-  // else
-  //   splitMeasure(curlMeasure, posWaleCurl, negWaleCurl);
 }
 
 void TimeFunction::computeAngleWithGuidingField() {

@@ -55,7 +55,8 @@ public:
   double operator()(Vertex v) const { return timeFunction[v]; }
   std::pair<double,double> operator()(Halfedge he) const { return {timeFunction[he.tailVertex()], timeFunction[he.tipVertex()]}; }
 
-  void maskCurl(std::vector<Vertex>& sources, double r, KnitDirection d);
+  template <typename SourceType> // either Vertex or SurfacePoint
+  void maskCurl(std::vector<SourceType>& sources, double r, KnitDirection d);
 
 private:
 
@@ -69,3 +70,5 @@ private:
   void computeAngleWithGuidingField();
 
 };
+
+#include "time_function.ipp"
