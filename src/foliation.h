@@ -18,8 +18,9 @@ public:
 
   // Singularities are SurfacePoint's on faces *of the parent mesh*.
   std::tuple<CornerData<double>, EdgeData<int>> computeWale(std::vector<SurfacePoint> posSings, std::vector<SurfacePoint> negSings, double period);
+
+  polyscope::CurveNetwork* showStripes(std::string name, CornerData<double>& stripeValues, double period);
   
-  std::tuple<std::vector<SurfacePoint>, std::vector<std::pair<int,int>>> traceStripes(CornerData<double>& stripeValues, double period);
 
 private:
 
@@ -35,6 +36,7 @@ private:
   // For the version that handles singular faces, look at computeStripeValuesFromOneForm() from the old codebase.
   CornerData<double> computeStripeValuesFromOneForm(HalfedgeData<double>& sigma, double period);
 
+  std::tuple<std::vector<SurfacePoint>, std::vector<std::pair<int,int>>> traceStripes(CornerData<double>& stripeValues, double period);
 
   class Solver {
 

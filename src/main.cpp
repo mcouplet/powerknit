@@ -81,6 +81,9 @@ int main(int argc, char** argv) {
   // vector<SurfacePoint> sites = quantizer.quantizeMeasure(timeFunction.courseCurl);
   // knitModel.showSurfacePoints("sites", sites);
 
+  MorseDecomposition morseDecomp(timeFunction);
+  Foliation foliation(knitModel, morseDecomp); // needed for viz even if stripes are loaded from file
+
   CornerData<double> courseStripeValues, waleStripeValues;
   EdgeData<int> courseEdgeIndex, waleEdgeIndex;
   if (!inStripesPath.empty()) {
@@ -90,7 +93,6 @@ int main(int argc, char** argv) {
     courseEdgeIndex = richData.getEdgeProperty<int>("courseEdgeIndex");
     waleEdgeIndex = richData.getEdgeProperty<int>("waleEdgeIndex");
   } else {
-    MorseDecomposition morseDecomp(timeFunction);
     Quantizer quantizer(knitModel);
 
     vector<vector<pair<SurfacePoint,SurfacePoint>>> pairedCourseSingsPerCell(morseDecomp.cells.size());
@@ -176,7 +178,6 @@ int main(int argc, char** argv) {
     else                    negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
 
     // Stripes!
-    Foliation foliation(knitModel, morseDecomp);
     tie(courseStripeValues, courseEdgeIndex) = foliation.computeCourse(pairedCourseSingsPerCell, *period);
     tie(waleStripeValues, waleEdgeIndex) = foliation.computeWale(posWaleSings, negWaleSings, *period);
 
@@ -191,6 +192,10 @@ int main(int argc, char** argv) {
       richData.write(outStripesPath);
     }
   }
+
+  // Trace stripes
+  foliation.showStripes("course stripes", courseStripeValues, *period)->setColor({0.0, 1.0, 0.0})->setEnabled(false);
+  foliation.showStripes("wale stripes", waleStripeValues, *period)->setColor({1.0, 0.5, 0.0})->setEnabled(false);
 
   // knit graph module (whole model)
   KnitGraph knitGraph(knitModel, *period, *period, courseStripeValues, courseEdgeIndex, waleStripeValues, waleEdgeIndex);

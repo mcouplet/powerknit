@@ -254,15 +254,6 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
       d1Bsigma[e] += sigma[he];
   knitModel.addEdgeScalarQuantity("d1Bsigma", d1Bsigma, polyscope::DataType::SYMMETRIC);
 
-  // // Offset stripe values 
-  // for (Corner co : mesh.corners())
-  //   stripeValues[co] += period/2;
-
-  CornerData<double> stripeValuesOffset = stripeValues-period/4;
-
-  auto [points, adj] = traceStripes(stripeValuesOffset, period); // offset to match knit graph
-  knitModel.showSurfacePointNetwork("course stripes", points, adj)->setRadius(1e-3)->setColor({0.0, 1.0, 0.0})->setEnabled(false);
-
   return {stripeValues, singOrderGlobal};
 }
 
@@ -435,11 +426,6 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeWale(std::vector<Surf
   CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma, period);
   knitModel.addCornerScalarQuantity("wale stripe values", stripeValues);
 
-  CornerData<double> stripeValuesOffset = stripeValues-period/4;
-
-  auto [points, adj] = traceStripes(stripeValuesOffset, period);
-  knitModel.showSurfacePointNetwork("wale stripes", points, adj)->setRadius(1e-3)->setColor({1.0, 0.5, 0.0})->setEnabled(false);
-
   return {stripeValues, singIndex};
 }
 
@@ -589,6 +575,13 @@ CornerData<double> Foliation::computeStripeValuesFromOneForm(HalfedgeData<double
   return alpha;
 }
 
+polyscope::CurveNetwork* Foliation::showStripes(string name, CornerData<double>& stripeValues, double period) {
+  CornerData<double> stripeValuesOffset = stripeValues-period/4;
+  auto [points, adj] = traceStripes(stripeValuesOffset, period);
+  return knitModel.showSurfacePointNetwork(name, points, adj)->setRadius(1e-3);
+}
+
+
 tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(CornerData<double>& stripeValues, double period) {
 
   ManifoldSurfaceMesh& mesh = knitModel.mesh();
@@ -607,10 +600,10 @@ tuple<vector<SurfacePoint>, vector<pair<int,int>>> Foliation::traceStripes(Corne
     edgeIndex[e] = round(d1 / period);
   }
 
-  EdgeData<double> singIndexViz(mesh, 0);
-  for (Edge e : mesh.edges())
-    singIndexViz[e] = edgeIndex[e];
-  knitModel.addEdgeScalarQuantity("traceStripes singIndex", singIndexViz);
+  // EdgeData<double> singIndexViz(mesh, 0);
+  // for (Edge e : mesh.edges())
+  //   singIndexViz[e] = edgeIndex[e];
+  // knitModel.addEdgeScalarQuantity("traceStripes singIndex", singIndexViz);
 
   // polyscope::show();
 

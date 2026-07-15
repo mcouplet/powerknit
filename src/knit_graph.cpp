@@ -1743,6 +1743,10 @@ void KnitGraph::tagIncreasesAndDecreases(){
       }
       else if (v->row_in_vertex == nullptr){//handle decreases at short rows (row_in short rows)
         v->col_out_vertex[0] = v->row_out_vertex->col_out_vertex[0];
+        if (v->row_out_vertex->col_out_vertex[0] == nullptr) {
+          knitModel.showSurfacePoints("debug tagIncreasesAndDecreases()", {v->surfacePoint});
+          polyscope::show();
+        }
         v->row_out_vertex->col_out_vertex[0]->col_in_vertex[1] = v;
       }
       else{//standard decrease
