@@ -1770,8 +1770,10 @@ void KnitGraph::tagIncreasesAndDecreases(){
         else{// standard case: connect by Euclidean distance
           ensure(v->row_out_vertex->col_out_vertex[0] != nullptr); 
           ensure(v->row_in_vertex->col_out_vertex[0] != nullptr);
-          // Vector3 p1 = getKnitGraphPosition(v->row_out_vertex->col_out_vertex[0]);
+          Vector3 p1 = knitModel.getSurfacePointPositions(v->row_out_vertex->col_out_vertex[0]->surfacePoint)[0];
+          Vector3 p2 = knitModel.getSurfacePointPositions(v->row_in_vertex->col_out_vertex[0]->surfacePoint)[0];
           // Vector3 p2 = getKnitGraphPosition(v->row_in_vertex->col_out_vertex[0]);
+          Vector3 currPos = knitModel.getSurfacePointPositions(v->surfacePoint)[0];
           // Vector3 currPos = getKnitGraphPosition(v->row_in_vertex->col_out_vertex[0]);
           if (v->row_out_vertex->col_out_vertex[0]->col_in_vertex[1] != nullptr){//this has already been set so pick the other
             v->col_out_vertex[0] = v->row_in_vertex->col_out_vertex[0];
@@ -1782,10 +1784,10 @@ void KnitGraph::tagIncreasesAndDecreases(){
             v->row_out_vertex->col_out_vertex[0]->col_in_vertex[1] = v;
           }
           else{
-            // EDIT: we just pick whatever as we don't have access to 3D positions.
-            // TODO: make this more principled!
-            // if (norm(currPos - p1) < norm(currPos - p2)){
-            if (true){
+            // TODO: make this more principled! Not great to have to access 3D space here.
+            // I have an idea for a general-purpose cavity filling method,
+            // but it's a task for another day.
+            if (norm(currPos - p1) < norm(currPos - p2)){
               v->col_out_vertex[0] = v->row_out_vertex->col_out_vertex[0];
               v->row_out_vertex->col_out_vertex[0]->col_in_vertex[1] = v;
             }
