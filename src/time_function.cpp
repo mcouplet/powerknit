@@ -60,11 +60,13 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
     if (isSaddle[v]) saddles.push_back(v);
   maskCurl(saddles, 3*coursePeriod, KnitDirection::Course);
   maskCurl(saddles, 3*walePeriod, KnitDirection::Wale);
-  
+
+  // Split curl measures into positive and negative
+  splitMeasure(courseCurl, posCourseCurl, negCourseCurl);
+  splitMeasure(waleCurl, posWaleCurl, negWaleCurl);
+
   knitModel.addVertexScalarQuantity("course curl", courseCurl, polyscope::DataType::SYMMETRIC);
   knitModel.addVertexScalarQuantity("wale curl", waleCurl, polyscope::DataType::SYMMETRIC);
-
-  // polyscope::show();
 
   // cutMesh();
 }
