@@ -45,6 +45,7 @@ class KnitGraph{
     SurfacePoint surfacePoint;//surfacePoint representation of this knit graph vertex
     bool isAlphaVirtual = false;//is a virtual vertex in the course direction
     bool isBetaVirtual = false;//is a virtual vertex in the wale direction 
+    bool isBoundary = false; // is a real vertex on top or bottom row
     
     void printVertexInfo(){
       
