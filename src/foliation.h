@@ -67,7 +67,7 @@ private:
     void constrainEdgeIndices(const EdgeData<int>& singIndex, double period);
     void constrainBoundaries();
     // he1 is +1, he2 is -1. Both are pointing in increasing time function.
-    void constrainSymmetricShortRowEnds(Halfedge he1, Halfedge he2);
+    void constrainSymmetricShortRowEnds(Halfedge he1, Halfedge he2, double period);
     void constrainHalfedgeOrientation(const EdgeData<int>& singIndex, const TimeFunction& tf);
     void setup();
     HalfedgeData<double> solve();

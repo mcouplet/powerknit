@@ -108,7 +108,8 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
   // Constrain edge indices. The -1's come from the fact that we're computing d1 *inside the bigon*.
   solver.constrainEdgeIndices(singIndex, period);
 
-  // solver.constrainHalfedgeOrientation(singIndex, timeFunction);
+  // Constrain stripes values to always increase in the direction of the time function.
+  solver.constrainHalfedgeOrientation(singIndex, timeFunction);
 
   // Boundary constraints: one-form is zero on boundary edges
   solver.constrainBoundaries();
@@ -131,7 +132,7 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
       cell.model().addHalfedgeScalarQuantity(format("halfedge path (t={})", tval), pathWeights);
 
       // Constrain symmetric short row ends
-      solver.constrainSymmetricShortRowEnds(phe1, phe2);
+      solver.constrainSymmetricShortRowEnds(phe1, phe2, period);
 
       // Add constraint to model
       solver.constrainHalfedgePath(cell.model().transferToParent(pathWeights), 0, 0);
@@ -776,7 +777,7 @@ void Foliation::Solver::constrainBoundaries() {
 }
 
 // he1 is +1, he2 is -1. Both are pointing in increasing time function.
-void Foliation::Solver::constrainSymmetricShortRowEnds(Halfedge he1, Halfedge he2) {
+void Foliation::Solver::constrainSymmetricShortRowEnds(Halfedge he1, Halfedge he2, double period) {
 
   // σ[he1] >= 0
   triplets.emplace_back(m, he1.getIndex(), 1);
@@ -794,13 +795,28 @@ void Foliation::Solver::constrainSymmetricShortRowEnds(Halfedge he1, Halfedge he
 }
 
 void Foliation::Solver::constrainHalfedgeOrientation(const EdgeData<int>& singIndex, const TimeFunction& tf) {
-  for (Halfedge he : knitModel.mesh().interiorHalfedges()) {
-    if (singIndex[he.edge()] == 0) { // regular edge
-      auto [t1, t2] = tf(he);
-      if (t2 > t1)  triplets.emplace_back(m, he.getIndex(), 1);
-      else          triplets.emplace_back(m, he.getIndex(), -1);
-      lbs.push_back(0); ubs.push_back(inf);
-      m++;
+  
+  // // All regular edges
+  // for (Halfedge he : knitModel.mesh().interiorHalfedges()) {
+  //   if (singIndex[he.edge()] == 0) { // regular edge
+  //     auto [t1, t2] = tf(he);
+  //     if (t2 > t1)  triplets.emplace_back(m, he.getIndex(), 1);
+  //     else          triplets.emplace_back(m, he.getIndex(), -1);
+  //     lbs.push_back(0); ubs.push_back(inf);
+  //     m++;
+  //   }
+  // }
+
+  // Only neighborhood of singular edges (diamond boundary)
+  for (Edge e : knitModel.mesh().edges()) {
+    if (singIndex[e] != 0) {
+      for (Halfedge he : e.diamondBoundary()) {
+        auto [t1, t2] = tf(he);
+        if (t2 > t1)  triplets.emplace_back(m, he.getIndex(), 1);
+        else          triplets.emplace_back(m, he.getIndex(), -1);
+        lbs.push_back(0); ubs.push_back(inf);
+        m++;
+      }
     }
   }
 }
