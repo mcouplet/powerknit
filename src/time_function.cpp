@@ -20,6 +20,10 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
 
   cutSaddleLoops(_knitModel);
   findSaddles(); // hopefully they stay the same
+  for (Vertex v : knitModel.mesh().vertices())
+    if (isSaddle[v]) saddles.push_back(v);
+
+  // Populate list of saddles
 
   // At this stage the mesh and geometry are final
   heatSolver = make_unique<HeatMethodDistanceSolver>(knitModel.geom());
@@ -55,9 +59,6 @@ TimeFunction::TimeFunction(KnitModel& _knitModel, double coursePeriod, double wa
   }
 
   // Mask curl measures around saddles
-  vector<Vertex> saddles;
-  for (Vertex v : knitModel.mesh().vertices())
-    if (isSaddle[v]) saddles.push_back(v);
   maskCurl(saddles, 3*coursePeriod, KnitDirection::Course);
   maskCurl(saddles, 3*walePeriod, KnitDirection::Wale);
 

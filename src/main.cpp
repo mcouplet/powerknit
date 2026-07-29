@@ -174,6 +174,8 @@ int main(int argc, char** argv) {
     // First, mask wale curl around course singularities to avoid collisions in the knit graph
     timeFunction.maskCurl(allCourseSings, *period, KnitDirection::Wale);
     knitModel.addVertexScalarQuantity("wale curl (masked)", timeFunction.waleCurl, polyscope::DataType::SYMMETRIC);
+    knitModel.addVertexScalarQuantity("wale curl (+) (masked)", timeFunction.posWaleCurl, polyscope::DataType::SYMMETRIC);
+    knitModel.addVertexScalarQuantity("wale curl (-) (masked)", -timeFunction.negWaleCurl, polyscope::DataType::SYMMETRIC);
 
 
     vector<SurfacePoint> posWaleSings, negWaleSings;
@@ -181,6 +183,12 @@ int main(int argc, char** argv) {
     else                    posWaleSings = quantizer.quantizeMeasure(timeFunction.posWaleCurl, *period);
     if (targetNegWaleSings) negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *targetNegWaleSings);
     else                    negWaleSings = quantizer.quantizeMeasure(timeFunction.negWaleCurl, *period);
+
+    // Filter out wale singularities that are too close to saddle
+    timeFunction.filterPointsCloseToSources(posWaleSings, timeFunction.saddles, 3*(*period));
+    timeFunction.filterPointsCloseToSources(negWaleSings, timeFunction.saddles, 3*(*period));
+    knitModel.showSurfacePoints("pos wale sings", posWaleSings)->setEnabled(false);
+    knitModel.showSurfacePoints("neg wale sings", negWaleSings)->setEnabled(false);
 
     // Stripes!
     tie(courseStripeValues, courseEdgeIndex) = foliation.computeCourse(pairedCourseSingsPerCell, *period);

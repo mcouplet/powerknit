@@ -21,6 +21,7 @@ public:
   VertexData<double> courseCurl, waleCurl;  // vertex curl of guiding fields, computed with [de Goes 2016].
   VertexData<double> posCourseCurl, negCourseCurl, posWaleCurl, negWaleCurl; // the positive and negative parts
   VertexData<bool> isSaddle; // better than a list because it remains valid through compresses
+  std::vector<Vertex> saddles; // only for final, cut model
   EdgeData<bool> isSeparatrix; // populated by cutSaddleLoops
   std::array<HalfedgeData<double>,2> angleWithGuidingField; // angle (in [0,π/2]) between an edge and the course/wale guiding field
 
@@ -57,6 +58,10 @@ public:
 
   template <typename SourceType> // either Vertex or SurfacePoint
   void maskCurl(std::vector<SourceType>& sources, double r, KnitDirection d);
+
+  // Given a list of points, filter out the ones that are close to one of the given sources
+  template <typename SourceType>
+  void filterPointsCloseToSources(std::vector<SurfacePoint>& points, std::vector<SourceType>& sources, double r);
 
 private:
 
