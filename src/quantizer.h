@@ -28,9 +28,9 @@ private:
   const KnitModelInterface& knitModel; // this way we have access to the visualization tools
 
   // Some parameters
-  const double tCoef = 1.0; // diffusion time coefficient for vector heat method
+  const double tCoef = 0.5; // diffusion time coefficient for vector heat method. Shorter is sharper, but can lead to numerical issues with overflows
   const int maxIt = 1000;
-  const double karcherStepSize = 0.8; // step size for steps towards cell centers
+  const double karcherStepSize = 1.0; // step size for steps towards cell centers
   double meanEdgeLength;
   double shortTime; // diffusion time - computed at construction
 
