@@ -95,6 +95,7 @@ TimeFunction::TimeFunction(KnitSubModel& _knitModel, const TimeFunction& parent)
     waleGuide[f] = courseGuide[f].rotate90();
   }
   computeAngleWithGuidingField();
+  computeAngleParam();
 }
 
 void TimeFunction::computeTimeFunction(KnitModel& fullKnitModel) {
@@ -344,3 +345,149 @@ void TimeFunction::computeAngleWithGuidingField() {
   }
 }
 
+void TimeFunction::computeAngleParam() {
+  // Corner potential obtained by integrating the harmonic one-form (2π holonomy around the boundary).
+
+  ensure(saddles.empty()); // must be a cylinder
+
+  // References, for convenience
+  ManifoldSurfaceMesh& mesh = knitModel.mesh();
+  EdgeLengthGeometry& geom = knitModel.geom();
+
+  int m = 0;                   // row number
+  int nHE = mesh.nHalfedges(); // number of unknowns (half-edge values)
+
+  // Build the harmonicity operator A (rows = equations, cols = half-edges).
+  vector<Eigen::Triplet<double>> triplets;
+  geom.requireEdgeCotanWeights();
+
+  // Co-closedness d*⍵ = 0: #V x #HE cotangent Laplacian (V equations)
+  for (Vertex v : mesh.vertices()) {
+    for (Halfedge he : v.outgoingHalfedges())
+      triplets.emplace_back(m, he.getIndex(), geom.edgeCotanWeights[he.edge()]);
+    m++;
+  }
+
+  // Closedness d⍵ = 0 (F equations)
+  for (Face f : mesh.faces()) {
+    for (Halfedge he : f.adjacentHalfedges())
+      triplets.emplace_back(m, he.getIndex(), +1);
+    m++;
+  }
+
+  // Anti-symmetry across edges, ⍵_he + ⍵_twin = 0 (E equations)
+  for (Edge e : mesh.edges()) {
+    Halfedge he = e.halfedge();
+    triplets.emplace_back(m, he.getIndex(), +1);
+    triplets.emplace_back(m, he.twin().getIndex(), +1);
+    m++;
+  }
+
+  // Total here: V+E+F = (V-E+F) + 2E = χ + 2E = 2E
+  SparseMatrix<double> A(m, nHE);
+  A.setFromTriplets(triplets.begin(), triplets.end());
+
+  // Boundary loop holonomy constraint cᵀ⍵ = γ, enforced with a Lagrange
+  // multiplier λ (one loop is enough; it pins the 1D harmonic space).
+  // Pick boundary loop corresponding to lower time value to get correct orientation.
+  BoundaryLoop bloop; double tval = 2;
+  for (BoundaryLoop bl : mesh.boundaryLoops()) {
+    for (Vertex v : bl.adjacentVertices()) {
+      if (timeFunction[v] < tval) {
+        bloop = bl;
+        tval = timeFunction[v];
+      }
+      break;
+    }
+  }
+  Eigen::VectorXd c = Eigen::VectorXd::Zero(nHE);
+  for (Halfedge he : bloop.adjacentHalfedges())
+    c(he.getIndex()) = +1;
+  const double gamma = 2 * M_PI; // prescribed angle holonomy around the boundary
+
+  // Symmetric KKT system for min ½‖A⍵‖² s.t. cᵀ⍵ = γ:
+  //   [[AᵀA, c], [cᵀ, 0]] [⍵; λ] = [0; γ]
+  SparseMatrix<double> M = A.transpose() * A;
+  vector<Eigen::Triplet<double>> kkt;
+  for (int k = 0; k < M.outerSize(); k++)
+    for (SparseMatrix<double>::InnerIterator it(M, k); it; ++it)
+      kkt.emplace_back(it.row(), it.col(), it.value());
+  for (int i = 0; i < nHE; i++)
+    if (c(i) != 0) {
+      kkt.emplace_back(i, nHE, c(i)); // multiplier column
+      kkt.emplace_back(nHE, i, c(i)); // constraint row
+    }
+  SparseMatrix<double> K(nHE + 1, nHE + 1);
+  K.setFromTriplets(kkt.begin(), kkt.end());
+
+  Eigen::VectorXd rhs = Eigen::VectorXd::Zero(nHE + 1);
+  rhs(nHE) = gamma;
+
+  Eigen::SparseLU<SparseMatrix<double>> solver;
+  solver.compute(K);
+  if (solver.info() != Eigen::Success)
+    std::cerr << "computeAngleParam: KKT decomposition failed" << std::endl;
+  Eigen::VectorXd sol = solver.solve(rhs);
+  if (solver.info() != Eigen::Success)
+    std::cerr << "computeAngleParam: KKT solve failed" << std::endl;
+
+  Eigen::VectorXd omega = sol.head(nHE);
+  double lambda = sol(nHE);
+  // DEBUG_VAR((A * omega).norm()); // harmonicity residual, should be ~0
+  // DEBUG_VAR(c.dot(omega));       // realized holonomy, should be γ
+  // DEBUG_VAR(lambda);             // should be ~0 when the constraint is compatible
+
+  // Pack the solved one-form into half-edge data.
+  HalfedgeData<double> sigma(mesh);
+  for (Halfedge he : mesh.halfedges())
+    sigma[he] = omega(he.getIndex());
+
+  // Integrate to a vertex potential via a spanning tree (avoids the loop, so
+  // single-valued): θ(tip) = θ(tail) + ⍵_he.
+  VertexData<double> alphaVerts(mesh);
+  VertexData<bool> visited(mesh, false);
+  queue<Vertex> bfs;
+  Vertex root = mesh.vertex(0);
+  alphaVerts[root] = 0;
+  visited[root] = true;
+  bfs.push(root);
+  while (!bfs.empty()) {
+    Vertex u = bfs.front(); bfs.pop();
+    for (Halfedge he : u.outgoingHalfedges()) if (he.isInterior()) {
+      Vertex v = he.tipVertex();
+      if (!visited[v]) {
+        alphaVerts[v] = alphaVerts[u] + sigma[he];
+        visited[v] = true;
+        bfs.push(v);
+      }
+    }
+  }
+
+  // Spread to corners by integrating within each face, so values stay consistent
+  // per face and can be interpolated across the 2π seam.
+  angleParam = CornerData<double>(mesh);
+  for (Face f : mesh.faces()) {
+    Halfedge hij = f.halfedge(), hjk = hij.next(), hki = hjk.next();
+    angleParam[hij.corner()] = alphaVerts[hij.vertex()];
+    angleParam[hjk.corner()] = angleParam[hij.corner()] + sigma[hij];
+    angleParam[hki.corner()] = angleParam[hjk.corner()] + sigma[hjk];
+  }
+}
+
+double TimeFunction::angleParamOfPoint(const SurfacePoint& p) const {
+
+  // // Old code that safeguarded face points. Now we allow edges and vertices
+  // SurfacePoint pf = p; // point in face
+  // if (p.type != SurfacePointType::Face) {
+  //   ensure(p.type == SurfacePointType::Edge && "singularity point is neither on face nor edge!");
+  //   ensure(p.edge.isBoundary() && "singularity point lies on an interior edge, making the angle param ambiguous!");
+  //   // at this point we know p lies on a boundary edge: face is unambiguous
+  //   pf = p.inSomeFace();
+  // }
+
+  SurfacePoint pf = p.inSomeFace();
+  double angle = 0; int i = 0;
+  for (Corner co : pf.face.adjacentCorners())
+    angle += angleParam[co] * pf.faceCoords[i++];
+  return angle;
+}

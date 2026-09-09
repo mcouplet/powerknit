@@ -15,9 +15,6 @@ public:
   // Output SurfacePoint's are guaranteed located on edges
   std::vector<std::pair<SurfacePoint,SurfacePoint>> match(const std::vector<SurfacePoint>& posSings, const std::vector<SurfacePoint>& negSings);
 
-  // Corner potential obtained by integrating the harmonic one-form (2π holonomy around the boundary).
-  CornerData<double> computeAngleParam();
-
 private:
   const KnitModelInterface& knitModel;
   const TimeFunction& timeFunction;

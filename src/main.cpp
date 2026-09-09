@@ -85,6 +85,11 @@ int main(int argc, char** argv) {
   // knitModel.showSurfacePoints("sites", sites);
 
   MorseDecomposition morseDecomp(timeFunction);
+
+  // Viz angle param
+  for (auto& cell : morseDecomp.cells)
+    cell.model().addCornerScalarQuantity("angle param", cell.timeFunction.angleParam);
+
   Foliation foliation(knitModel, morseDecomp); // needed for viz even if stripes are loaded from file
 
   CornerData<double> courseStripeValues, waleStripeValues;
@@ -151,8 +156,8 @@ int main(int argc, char** argv) {
       cell.model().showSurfacePoints("matched pos course sings", matchedPosCourseSings)->setPointColor({1,0,0})->setEnabled(false);
       cell.model().showSurfacePoints("matched neg course sings", matchedNegCourseSings)->setPointColor({0,0,1})->setEnabled(false);
 
-      auto angleParam = singularityMatcher.computeAngleParam();
-      cell.model().addCornerScalarQuantity("angle param", angleParam);
+      // auto angleParam = singularityMatcher.computeAngleParam();
+      cell.model().addCornerScalarQuantity("angle param", cell.timeFunction.angleParam);
 
       // // sanity check that sings are still aligned when transferring to parent
       // vector<SurfacePoint> parentPosCourseSings, parentNegCourseSings;
@@ -162,7 +167,7 @@ int main(int argc, char** argv) {
       //   SurfacePoint sp1 = cell.model().transferToParent(singPair.first), sp2 = cell.model().transferToParent(singPair.second);
       // }
 
-      pairedCourseSingsPerCell[cell.getIndex()] = matchedSings; // not used?
+      pairedCourseSingsPerCell[cell.getIndex()] = matchedSings; // not used? could be useful if we decide to I/O singularities
 
       // Append new sings to the global list
       for (auto &[s1,s2] : matchedSings) {

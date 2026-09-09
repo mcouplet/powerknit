@@ -12,7 +12,7 @@ public:
       knitModel(_knitModel), morseDecomp(_morseDecomp), timeFunction(morseDecomp.source) {}
 
   // Singularities are SurfacePoint's on edges *of the sub-mesh*.
-  // Singularity pairs *must be sorted*.
+  // Singularity pairs *must be sorted by time value*.
   // Pairs are (+1, -1)
   std::tuple<CornerData<double>, EdgeData<int>> computeCourse(std::vector<std::vector<std::pair<SurfacePoint,SurfacePoint>>> pairedSingsPerCell, double period);
 

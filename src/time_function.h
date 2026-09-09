@@ -3,6 +3,8 @@
 #include "knit_model.h"
 #include "geometrycentral/surface/heat_method_distance.h"
 
+#include <queue>
+
 enum KnitDirection { Course, Wale }; // we might want to put this in a specific shared header, under a namespace
 
 // This class will handle everything related to the time function:
@@ -24,10 +26,10 @@ public:
   std::vector<Vertex> saddles; // only for final, cut model
   EdgeData<bool> isSeparatrix; // populated by cutSaddleLoops
   std::array<HalfedgeData<double>,2> angleWithGuidingField; // angle (in [0,π/2]) between an edge and the course/wale guiding field
+  CornerData<double> angleParam; // angle parametrization - computed if knitModel is a cylinder
+  double angleParamOfPoint(const SurfacePoint& p) const; // probe angle parametrization at specific point. Answer is up to 2π
 
   std::unique_ptr<HeatMethodDistanceSolver> heatSolver = nullptr; // for masking. Null for sub-models
-
-  void morseDecompose();
 
   template <typename T> // either SurfacePoint or Vertex
   void sortByTime(std::vector<T>& points) {
@@ -73,7 +75,7 @@ private:
   void findSaddles();
   void cutSaddleLoops(KnitModel& fullKnitModel); // requires a full model so that we can edit the global mesh!
   void computeAngleWithGuidingField();
-
+  void computeAngleParam();
 };
 
 #include "time_function.ipp"
