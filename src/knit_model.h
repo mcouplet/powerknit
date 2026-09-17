@@ -38,6 +38,7 @@ public:
   virtual polyscope::PointCloud* showVertices(std::string name, const std::vector<Vertex>& vertices) const = 0;
   virtual polyscope::PointCloud* showSurfacePoints(std::string name, const std::vector<SurfacePoint>& surfacePoints) const = 0;
   virtual polyscope::CurveNetwork* showEdges(std::string name, const std::vector<Edge>& edges) const = 0;
+  virtual polyscope::SurfaceFaceScalarQuantity* showFaces(std::string name, const std::vector<Face>& faces) const = 0;
 
   // Task-specific, re-uses viz routines above
   polyscope::SurfaceScalarQuantity* addMeasure(std::string name, const VertexData<double>& data);
@@ -101,6 +102,7 @@ public:
   polyscope::SurfaceCornerScalarQuantity* addCornerScalarQuantity(std::string name, const CornerData<double>& data, polyscope::DataType type = polyscope::DataType::STANDARD) const override;  
   polyscope::PointCloud* showVertices(std::string name, const std::vector<Vertex>& vertices) const override;
   polyscope::CurveNetwork* showEdges(std::string name, const std::vector<Edge>& edges) const override;
+  polyscope::SurfaceFaceScalarQuantity* showFaces(std::string name, const std::vector<Face>& faces) const override;
   polyscope::PointCloud* showSurfacePoints(std::string name, const std::vector<SurfacePoint>& surfacePoints) const override;
   polyscope::CurveNetwork* showSurfacePointNetwork(std::string name, const std::vector<SurfacePoint>& points, const std::vector<std::pair<int,int>>& adj) const; // assumes SurfacePoint's on edges: fix!
 
@@ -215,6 +217,7 @@ public:
   polyscope::SurfaceCornerScalarQuantity* addCornerScalarQuantity(std::string name, const CornerData<double>& data, polyscope::DataType type = polyscope::DataType::STANDARD) const override;
   polyscope::PointCloud* showVertices(std::string name, const std::vector<Vertex>& vertices) const override;
   polyscope::CurveNetwork* showEdges(std::string name, const std::vector<Edge>& edges) const override;
+  polyscope::SurfaceFaceScalarQuantity* showFaces(std::string name, const std::vector<Face>& faces) const override;
   polyscope::PointCloud* showSurfacePoints(std::string name, const std::vector<SurfacePoint>& surfacePoints) const override;
 
 private:

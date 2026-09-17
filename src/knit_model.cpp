@@ -345,6 +345,12 @@ polyscope::CurveNetwork* KnitModel::showEdges(std::string name, const std::vecto
   return polyscope::registerCurveNetwork(name, positions, edgeIndices);
 }
 
+polyscope::SurfaceFaceScalarQuantity* KnitModel::showFaces(std::string name, const std::vector<Face>& faces) const {
+  FaceData<double> mask(mesh(), 0.0);
+  for (Face f : faces) mask[f] = 1.0;
+  return addFaceScalarQuantity(name, mask, polyscope::DataType::CATEGORICAL);
+}
+
 vector<Vector3> KnitModel::getSurfacePointPositions(const SurfacePoint& point) const {
 
   vector<Vector3> positions;
@@ -734,6 +740,13 @@ polyscope::CurveNetwork* KnitSubModel::showEdges(std::string name, const std::ve
   for (Edge e : edges)
     parentEdges.push_back(edgeToParent.at(e));
   return parent.showEdges(format("[{}] {}", id, name), parentEdges);
+}
+
+polyscope::SurfaceFaceScalarQuantity* KnitSubModel::showFaces(std::string name, const std::vector<Face>& faces) const {
+  vector<Face> parentFaces;
+  for (Face f : faces)
+    parentFaces.push_back(faceToParent.at(f));
+  return parent.showFaces(format("[{}] {}", id, name), parentFaces);
 }
 
 polyscope::PointCloud* KnitSubModel::showSurfacePoints(string name, const vector<SurfacePoint>& points) const {
