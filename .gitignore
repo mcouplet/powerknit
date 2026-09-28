@@ -1,2 +1,9 @@
 build*
 .DS_Store
+
+# Output files
+*.txt
+*.ply
+
+# Config files
+*.ini
