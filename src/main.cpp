@@ -72,6 +72,9 @@ int main(int argc, char** argv) {
   knitModel.addHalfedgeScalarQuantity("course alignment", timeFunction.angleWithGuidingField[KnitDirection::Course]);
   knitModel.addHalfedgeScalarQuantity("wale alignment", timeFunction.angleWithGuidingField[KnitDirection::Wale]);
 
+  // Show user-specified course-aligned edges
+  knitModel.showEdges("course-aligned edges", knitModel.courseAlignedEdges)->setRadius(1e-3);
+
   // TODO: we might want to re-compute a harmonic time function on the cut mesh,
   // with constraints on the saddle loops time values.
 

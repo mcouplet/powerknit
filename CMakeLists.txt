@@ -147,6 +147,55 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(osqp_eigen)
 
+# ── Gmsh SDK (optional) ───────────────────────────────────────────────────────
+# Prebuilt SDK downloaded from gmsh.info. Set WITH_GMSH=OFF to build without it
+# (drops support for .msh input).
+option(WITH_GMSH "Build with Gmsh support (.msh input)" ON)
+set(GMSH_VERSION "4.15.2" CACHE STRING "Gmsh SDK version to fetch from gmsh.info")
+
+if(WITH_GMSH)
+    # Find the correct URL for the SDK
+    if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+        set(GMSH_SDK_URL "https://gmsh.info/bin/macOS/gmsh-${GMSH_VERSION}-MacOSARM-sdk.tgz")
+    elseif(APPLE)
+        set(GMSH_SDK_URL "https://gmsh.info/bin/macOS/gmsh-${GMSH_VERSION}-MacOSX-sdk.tgz")
+    elseif(WIN32)
+        set(GMSH_SDK_URL "https://gmsh.info/bin/Windows/gmsh-${GMSH_VERSION}-Windows64-sdk.zip")
+    elseif(UNIX AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+        set(GMSH_SDK_URL "https://gmsh.info/bin/Linux/gmsh-${GMSH_VERSION}-Linux64-sdk.tgz")
+    else()
+        message(WARNING "No prebuilt Gmsh SDK for ${CMAKE_SYSTEM_NAME}/${CMAKE_SYSTEM_PROCESSOR}"
+                        " — building without Gmsh")
+        set(WITH_GMSH OFF)
+    endif()
+
+    set(GMSH_SDK_DIR ${CMAKE_BINARY_DIR}/deps/gmsh)
+    message(STATUS "Fetching Gmsh SDK: ${GMSH_SDK_URL}")
+    FetchContent_Declare(
+        gmsh_sdk
+        URL        ${GMSH_SDK_URL}
+        SOURCE_DIR ${GMSH_SDK_DIR}
+    )
+    FetchContent_MakeAvailable(gmsh_sdk)
+
+    find_library(GMSH_LIBRARY NAMES gmsh PATHS ${GMSH_SDK_DIR}/lib NO_DEFAULT_PATH REQUIRED)
+    add_library(gmsh::gmsh SHARED IMPORTED)
+    set_target_properties(gmsh::gmsh PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES ${GMSH_SDK_DIR}/include)
+    if(WIN32)
+        file(GLOB GMSH_DLL "${GMSH_SDK_DIR}/lib/gmsh*.dll" "${GMSH_SDK_DIR}/bin/gmsh*.dll")
+        list(GET GMSH_DLL 0 GMSH_DLL)
+        set_target_properties(gmsh::gmsh PROPERTIES
+            IMPORTED_IMPLIB   ${GMSH_LIBRARY}
+            IMPORTED_LOCATION ${GMSH_DLL})
+    else()
+        set_target_properties(gmsh::gmsh PROPERTIES IMPORTED_LOCATION ${GMSH_LIBRARY})
+    endif()
+    message(STATUS "Gmsh: ${GMSH_LIBRARY}")
+else()
+    message(STATUS "Gmsh support disabled")
+endif()
+
 # ── OpenMP (Apple Silicon / Homebrew libomp) ──────────────────────────────────
 if(APPLE)
     set(OpenMP_C_FLAGS        "-Xpreprocessor -fopenmp")
@@ -179,6 +228,12 @@ add_executable(powerknit
     src/homology.cpp
     src/knit_graph.cpp
 )
+
+if(WITH_GMSH)
+    target_sources(powerknit PRIVATE src/knit_model_gmsh.cpp)
+    target_compile_definitions(powerknit PRIVATE WITH_GMSH)
+    target_link_libraries(powerknit PRIVATE gmsh::gmsh)
+endif()
 
 target_link_libraries(powerknit PRIVATE
     polyscope

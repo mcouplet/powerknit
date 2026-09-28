@@ -67,6 +67,10 @@ public:
 
   KnitModel(const std::filesystem::path &inPath);
 
+  #ifdef WITH_GMSH
+    void parseMsh(const std::filesystem::path mshPath); // defined in knit_model_gmsh
+  #endif
+  
   ManifoldSurfaceMesh& mesh() const override { return *pMesh; }
   EdgeLengthGeometry&  geom() const override { return *pGeom; }
 

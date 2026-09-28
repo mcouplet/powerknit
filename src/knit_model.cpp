@@ -5,7 +5,6 @@
 #include <igl/grad_intrinsic.h>
 #include "geometrycentral/surface/remeshing.h"
 
-
 using namespace std;
 using namespace geometrycentral;
 using namespace geometrycentral::surface;
@@ -61,8 +60,15 @@ KnitModel::KnitModel(const fs::path& inPath) {
         this->courseEndLoops.push_back(bLoop);
       }
 
-	} else {
-			cout << "Input file extensions other than json are not yet supported." << endl;
+	} else if (inPath.extension() == ".msh") {
+      #ifdef WITH_GMSH
+        parseMsh(inPath);
+      #else // scold the user at runtime if they try to parse a .msh without Gmsh support
+        cout << "This build has no Gmsh support; rebuild with -DWITH_GMSH=ON to read .msh files." << end;
+        exit(1);
+      #endif
+  } else {
+			cout << "Input file extensions other than JSON and MSH are not yet supported." << endl;
 	}
 }
 

@@ -111,7 +111,7 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
   // Constrain stripes values to always increase in the direction of the time function.
   solver.constrainHalfedgeOrientation(singIndex, timeFunction);
 
-  // Boundary constraints: one-form is zero on boundary edges
+  // Boundary constraints: one-form is zero on boundary edges and courseAlignedEdges
   solver.constrainBoundaries();
 
   // Constrain Symmetric short row ends + Separatrix path routing + Ordering
@@ -767,12 +767,19 @@ void Foliation::Solver::constrainEdgeIndices(const EdgeData<int>& singIndex, dou
 }
 
 void Foliation::Solver::constrainBoundaries() {
+  // Boundary loops
   for (BoundaryLoop bloop : knitModel.mesh().boundaryLoops()) {
     for (Halfedge he : bloop.adjacentHalfedges()) {
       triplets.emplace_back(m, he.getIndex(), 1);
       lbs.push_back(0); ubs.push_back(0);
       m++;
     }
+  }
+  // User-specified course-aligned edges
+  for (Edge e : knitModel.courseAlignedEdges) {
+    triplets.emplace_back(m, e.halfedge().getIndex(), 1);
+    lbs.push_back(0); ubs.push_back(0);
+    m++;
   }
 }
 
