@@ -210,8 +210,6 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeCourse(vector<vector<
 
   CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma, period);
 
-  knitModel.addCornerScalarQuantity("course stripe values", stripeValues);
-
   // Sanity check: d1 on stripe values
   int nviol = 0; double maxviol = 0;
   for (Edge e : mesh.edges()) {
@@ -425,7 +423,6 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeWale(std::vector<Surf
 
 
   CornerData<double> stripeValues = computeStripeValuesFromOneForm(sigma, period);
-  knitModel.addCornerScalarQuantity("wale stripe values", stripeValues);
 
   return {stripeValues, singIndex};
 }

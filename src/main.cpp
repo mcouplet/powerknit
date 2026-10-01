@@ -214,9 +214,13 @@ int main(int argc, char** argv) {
     }
   }
 
-  // Trace stripes
+  // Trace stripes and viz stripe values
   foliation.showStripes("course stripes", courseStripeValues, *period)->setColor({0.0, 1.0, 0.0})->setEnabled(false);
   foliation.showStripes("wale stripes", waleStripeValues, *period)->setColor({1.0, 0.5, 0.0})->setEnabled(false);
+  knitModel.addCornerScalarQuantity("course stripe values", courseStripeValues)
+    ->setIsolinesEnabled(true)->setIsolinePeriod(*period/10, false)->setIsolineDarkness(0.2);
+  knitModel.addCornerScalarQuantity("wale stripe values", waleStripeValues)
+    ->setIsolinesEnabled(true)->setIsolinePeriod(*period/10, false)->setIsolineDarkness(0.2);
 
   // knit graph module (whole model)
   KnitGraph knitGraph(knitModel, *period, *period, courseStripeValues, courseEdgeIndex, waleStripeValues, waleEdgeIndex);
