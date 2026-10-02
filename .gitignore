@@ -4,6 +4,7 @@ build*
 # Output files
 *.txt
 *.ply
+knitgraph.obj
 
 # Config files
 *.ini

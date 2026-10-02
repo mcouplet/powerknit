@@ -228,7 +228,7 @@ int main(int argc, char** argv) {
   knitGraph.traceShortRows();
   knitGraph.writeKnitGraphToTxtFile(knitGraphPath);
   
-  polyscope::show();
+  if (!nogui) polyscope::show();
 
   return 0;
 }
