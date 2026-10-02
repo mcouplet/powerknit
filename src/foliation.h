@@ -69,6 +69,8 @@ private:
     // he1 is +1, he2 is -1. Both are pointing in increasing time function.
     void constrainSymmetricShortRowEnds(Halfedge he1, Halfedge he2, double period);
     void constrainHalfedgeOrientation(const EdgeData<int>& singIndex, const TimeFunction& tf);
+    void constrainWaleSingOrientation(Edge e, const TimeFunction& tf);
+
     void setup();
     HalfedgeData<double> solve();
 

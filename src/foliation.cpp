@@ -326,6 +326,11 @@ tuple<CornerData<double>, EdgeData<int>> Foliation::computeWale(std::vector<Surf
   // Constrain edge indices. The -1's come from the fact that we're computing d1 *inside the bigon*.
   solver.constrainEdgeIndices(singIndex, period);
 
+  // Constrain half-edge orientation at singularities
+  for (Edge e : mesh.edges())
+    if (singIndex[e] != 0)
+      solver.constrainWaleSingOrientation(e, timeFunction);
+
   solver.setup();
   HalfedgeData<double> sigma = solver.solve();
 
@@ -822,6 +827,21 @@ void Foliation::Solver::constrainHalfedgeOrientation(const EdgeData<int>& singIn
         m++;
       }
     }
+  }
+}
+
+void Foliation::Solver::constrainWaleSingOrientation(Edge e, const TimeFunction& tf) {
+  
+  // Constrain one-form to be positive in the direction of the wale guiding field,
+  // for both sides of singular edges.
+  knitModel.geom().requireHalfedgeVectorsInFace();
+  for (Halfedge he : e.adjacentHalfedges()) {
+    triplets.emplace_back(m, he.getIndex(), 1);
+    if (dot(tf.waleGuide[he.face()], knitModel.geom().halfedgeVectorsInFace[he]) > 0) // σ[he] >= 0
+      lbs.push_back(0), ubs.push_back(inf);
+    else // σ[he] <= 0
+      lbs.push_back(-inf), ubs.push_back(0);
+    m++;
   }
 }
 
